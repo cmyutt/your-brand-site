@@ -2,12 +2,17 @@
 import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
+import { Prisma } from '@prisma/client';
 
 export const runtime = 'nodejs';
 
-/* ----------------------- 유틸 ----------------------- */
+// 관계 포함 타입
+type ProductWithRels = Prisma.ProductGetPayload<{
+  include: { images: true; variants: true };
+}>;
 
-// 숫자 정규화
+/* ----------------------- util ----------------------- */
 function parsePrice(input: FormDataEntryValue | null) {
   const s = String(input ?? '').replace(/[^\d]/g, '');
   const n = parseInt(s || '0', 10);
@@ -17,12 +22,10 @@ function parsePrice(input: FormDataEntryValue | null) {
   return n;
 }
 
-/* ----------------------- 서버 액션 ----------------------- */
-
+/* ----------------------- server actions ----------------------- */
 // 생성
 async function createProduct(formData: FormData) {
   'use server';
-
   const name = String(formData.get('name') || '').trim();
   const slug = String(formData.get('slug') || '').trim();
   const price = parsePrice(formData.get('price'));
@@ -41,7 +44,7 @@ async function createProduct(formData: FormData) {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-    .map((v) => ({ name: v, stock: 0, extra: 0 }));
+    .map((name) => ({ name, stock: 0, extra: 0 }));
 
   await prisma.product.create({
     data: {
@@ -51,7 +54,10 @@ async function createProduct(formData: FormData) {
       description: description || null,
       images: { create: imageArr },
       variants: {
-        create: variantArr.length ? variantArr : [{ name: 'Default', stock: 0, extra: 0 }],
+        create:
+          variantArr.length > 0
+            ? variantArr
+            : [{ name: 'Default', stock: 0, extra: 0 }],
       },
       published: true,
     },
@@ -60,12 +66,11 @@ async function createProduct(formData: FormData) {
   revalidatePath('/admin/products');
 }
 
-// 삭제 (스키마에서 onDelete: Cascade 설정 가정)
+// 삭제 (CASCADE 전제)
 async function deleteProduct(formData: FormData) {
   'use server';
   const id = String(formData.get('id') || '');
   if (!id) throw new Error('id 필요');
-
   await prisma.product.delete({ where: { id } });
   revalidatePath('/admin/products');
 }
@@ -76,12 +81,11 @@ async function updatePrice(formData: FormData) {
   const id = String(formData.get('id') || '');
   const price = parsePrice(formData.get('price'));
   if (!id) throw new Error('id 필요');
-
   await prisma.product.update({ where: { id }, data: { price } });
   revalidatePath('/admin/products');
 }
 
-// 인라인 첫 옵션 재고 수정 (예시)
+// 첫 번째 옵션 재고 수정(예시)
 async function updateFirstVariantStock(formData: FormData) {
   'use server';
   const productId = String(formData.get('productId') || '');
@@ -99,218 +103,30 @@ async function updateFirstVariantStock(formData: FormData) {
   revalidatePath('/admin/products');
 }
 
-// publish 토글
+// 공개/비공개 토글
 async function togglePublish(formData: FormData) {
   'use server';
   const id = String(formData.get('id') || '');
   const next = String(formData.get('next') || '') === 'true';
   if (!id) throw new Error('id 필요');
-
   await prisma.product.update({ where: { id }, data: { published: next } });
   revalidatePath('/admin/products');
 }
 
-// 검색 리다이렉트 액션
+// 검색 액션
 async function searchAction(formData: FormData) {
   'use server';
   const q = String(formData.get('q') || '');
   const only = String(formData.get('only') || '');
   const per = String(formData.get('per') || '');
-
   const qs = new URLSearchParams();
   if (q) qs.set('q', q);
-  if (only) qs.set('only', only as any);
+  if (only) qs.set('only', only);
   if (per) qs.set('per', per);
-
   redirect(`/admin/products?${qs.toString()}`);
 }
 
-/* ----------------------- 페이지 ----------------------- */
-
-// Next 15 표준 searchParams 타입을 안전 파싱
-type SP = Record<string, string | string[] | undefined>;
-
-export default async function AdminProducts({ searchParams }: { searchParams?: SP }) {
-  const q = typeof searchParams?.q === 'string' ? searchParams.q.trim() : '';
-  const page = Math.max(
-    1,
-    parseInt(typeof searchParams?.page === 'string' ? searchParams.page : '1', 10) || 1,
-  );
-  const per = Math.min(
-    50,
-    Math.max(5, parseInt(typeof searchParams?.per === 'string' ? searchParams.per : '10', 10) || 10),
-  );
-  const only =
-    typeof searchParams?.only === 'string'
-      ? (searchParams.only as 'published' | 'unpublished' | '')
-      : '';
-
-  const where = {
-    AND: [
-      q
-        ? {
-            OR: [
-              { name: { contains: q, mode: 'insensitive' } },
-              { slug: { contains: q, mode: 'insensitive' } },
-            ],
-          }
-        : {},
-      only === 'published' ? { published: true } : {},
-      only === 'unpublished' ? { published: false } : {},
-    ],
-  };
-
-  const [total, products] = await Promise.all([
-    prisma.product.count({ where }),
-    prisma.product.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      include: { images: true, variants: { orderBy: { name: 'asc' } } },
-      skip: (page - 1) * per,
-      take: per,
-    }),
-  ]);
-
-  const pages = Math.max(1, Math.ceil(total / per));
-
-  return (
-    <div style={{ display: 'grid', gap: 24 }}>
-      {/* 검색/필터 */}
-      <SearchBar />
-
-      {/* 생성 폼 */}
-      <form
-        action={createProduct}
-        style={{ display: 'grid', gap: 8, border: '1px solid #eee', padding: 16, borderRadius: 12 }}
-      >
-        <h2 style={{ fontSize: 18, fontWeight: 700 }}>상품 등록</h2>
-
-        <input name="name" placeholder="name" required />
-        <input name="slug" placeholder="slug (영문/하이픈)" required />
-
-        <input
-          name="price"
-          type="text"
-          inputMode="numeric"
-          placeholder="price (원) — 199,000도 가능"
-          title="숫자 또는 숫자+쉼표"
-          required
-        />
-
-        <textarea name="description" placeholder="description(optional)" />
-        <textarea
-          name="images"
-          placeholder={`이미지 URL(줄바꿈)\nhttps://picsum.photos/seed/a/800/1000`}
-          rows={3}
-        />
-        <input name="variants" placeholder="옵션(콤마 구분) 예: S,M,L" />
-
-        <button type="submit">Create</button>
-      </form>
-
-      {/* 목록 */}
-      <div>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 8,
-          }}
-        >
-          <h2 style={{ fontSize: 18, fontWeight: 700 }}>상품 목록 ({total})</h2>
-          <small style={{ opacity: 0.7 }}>
-            {page}/{pages} pages · per {per}
-          </small>
-        </div>
-
-        <ul style={{ display: 'grid', gap: 8 }}>
-          {products.map((p) => (
-            <li key={p.id} style={{ border: '1px solid #eee', borderRadius: 12, padding: 12 }}>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr auto',
-                  gap: 12,
-                  alignItems: 'center',
-                }}
-              >
-                {/* left */}
-                <div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <strong>{p.name}</strong>
-                    <span style={{ opacity: 0.7 }}>{p.slug}</span>
-                    <span style={{ opacity: 0.7 }}>· {p.published ? 'Published' : 'Draft'}</span>
-                  </div>
-                  <div style={{ opacity: 0.7, marginTop: 4 }}>
-                    {p.images[0]?.url ? (
-                      <a href={p.images[0].url} target="_blank">
-                        대표이미지
-                      </a>
-                    ) : (
-                      '이미지 없음'
-                    )}{' '}
-                    · 옵션 {p.variants.length}개
-                  </div>
-                </div>
-
-                {/* right: actions */}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <a href={`/admin/products/${p.id}`}>Edit</a>
-
-                  {/* 인라인 가격 수정 */}
-                  <form action={updatePrice} style={{ display: 'flex', gap: 4 }}>
-                    <input type="hidden" name="id" value={p.id} />
-                    <input name="price" defaultValue={p.price} inputMode="numeric" style={{ width: 100 }} />
-                    <button type="submit">Save ₩</button>
-                  </form>
-
-                  {/* 첫 옵션 재고 인라인 수정 (예시) */}
-                  <form action={updateFirstVariantStock} style={{ display: 'flex', gap: 4 }}>
-                    <input type="hidden" name="productId" value={p.id} />
-                    <input
-                      name="stock"
-                      placeholder="stock"
-                      defaultValue={p.variants[0]?.stock ?? 0}
-                      inputMode="numeric"
-                      style={{ width: 80 }}
-                    />
-                    <button type="submit">Save 재고</button>
-                  </form>
-
-                  {/* publish 토글 */}
-                  <form action={togglePublish}>
-                    <input type="hidden" name="id" value={p.id} />
-                    <input type="hidden" name="next" value={(!p.published).toString()} />
-                    <button type="submit" style={{ padding: '4px 8px' }}>
-                      {p.published ? 'Unpublish' : 'Publish'}
-                    </button>
-                  </form>
-
-                  {/* 삭제 */}
-                  <form action={deleteProduct}>
-                    <input type="hidden" name="id" value={p.id} />
-                    <button
-                      type="submit"
-                      style={{ background: '#fee', border: '1px solid #f88', padding: '4px 8px' }}
-                    >
-                      Delete
-                    </button>
-                  </form>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-
-        {/* 페이지네이션 */}
-        <Pagination total={total} page={page} per={per} />
-      </div>
-    </div>
-  );
-}
-
-/* ----------------------- UI 헬퍼 ----------------------- */
+/* ----------------------- components ----------------------- */
 
 function buildQS(q: Record<string, string | number | undefined>) {
   const u = new URLSearchParams();
@@ -349,5 +165,235 @@ function SearchBar() {
       </select>
       <button type="submit">검색</button>
     </form>
+  );
+}
+
+/* ----------------------- page ----------------------- */
+
+// Next 15 표준 searchParams 타입
+type SP = Record<string, string | string[] | undefined>;
+
+export default async function AdminProducts({
+  searchParams,
+}: {
+  searchParams?: SP;
+}) {
+  const q =
+    typeof searchParams?.q === 'string' ? searchParams.q.trim() : '';
+
+  const page =
+    parseInt(
+      typeof searchParams?.page === 'string' ? searchParams.page : '1',
+      10,
+    ) || 1;
+
+  const perRaw =
+    parseInt(
+      typeof searchParams?.per === 'string' ? searchParams.per : '10',
+      10,
+    ) || 10;
+  const per = Math.min(50, Math.max(5, perRaw));
+
+  const only =
+    typeof searchParams?.only === 'string'
+      ? (searchParams.only as 'published' | 'unpublished' | '')
+      : '';
+
+  const where: Prisma.ProductWhereInput = {
+    AND: [
+      q
+        ? {
+            OR: [
+              { name: { contains: q, mode: 'insensitive' } },
+              { slug: { contains: q, mode: 'insensitive' } },
+            ],
+          }
+        : {},
+      only === 'published' ? { published: true } : {},
+      only === 'unpublished' ? { published: false } : {},
+    ],
+  };
+
+  const [total, products] = await Promise.all([
+    prisma.product.count({ where }),
+    prisma.product.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: { images: true, variants: { orderBy: { name: 'asc' } } },
+      skip: (page - 1) * per,
+      take: per,
+    }) as Promise<ProductWithRels[]>,
+  ]);
+
+  return (
+    <div style={{ display: 'grid', gap: 24 }}>
+      {/* 검색/필터 */}
+      <SearchBar />
+
+      {/* 생성 폼 */}
+      <form
+        action={createProduct}
+        style={{
+          display: 'grid',
+          gap: 8,
+          border: '1px solid #eee',
+          padding: 16,
+          borderRadius: 12,
+        }}
+      >
+        <h2 style={{ fontSize: 18, fontWeight: 700 }}>상품 등록</h2>
+
+        <input name="name" placeholder="name" required />
+        <input name="slug" placeholder="slug (영문/하이픈)" required />
+        <input
+          name="price"
+          type="text"
+          inputMode="numeric"
+          placeholder="price (원) — 199,000도 가능"
+          title="숫자 또는 숫자+쉼표"
+          required
+        />
+        <textarea name="description" placeholder="description(optional)" />
+        <textarea
+          name="images"
+          placeholder={`이미지 URL(줄바꿈)\nhttps://picsum.photos/seed/a/800/1000`}
+          rows={3}
+        />
+        <input name="variants" placeholder="옵션(콤마 구분) 예: S,M,L" />
+
+        <button type="submit">Create</button>
+      </form>
+
+      {/* 목록 */}
+      <div>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 8,
+          }}
+        >
+          <h2 style={{ fontSize: 18, fontWeight: 700 }}>
+            상품 목록 ({total})
+          </h2>
+          <small style={{ opacity: 0.7 }}>
+            {page}/{Math.max(1, Math.ceil(total / per))} pages · per {per}
+          </small>
+        </div>
+
+        <ul style={{ display: 'grid', gap: 8 }}>
+          {products.map((p) => (
+            <li
+              key={p.id}
+              style={{
+                border: '1px solid #eee',
+                borderRadius: 12,
+                padding: 12,
+              }}
+            >
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto',
+                  gap: 12,
+                  alignItems: 'center',
+                }}
+              >
+                {/* left */}
+                <div>
+                  <div
+                    style={{ display: 'flex', gap: 8, alignItems: 'center' }}
+                  >
+                    <strong>{p.name}</strong>
+                    <span style={{ opacity: 0.7 }}>{p.slug}</span>
+                    <span style={{ opacity: 0.7 }}>
+                      · {p.published ? 'Published' : 'Draft'}
+                    </span>
+                  </div>
+                  <div style={{ opacity: 0.7, marginTop: 4 }}>
+                    {p.images[0]?.url ? (
+                      <a
+                        href={p.images[0].url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        대표이미지
+                      </a>
+                    ) : (
+                      '이미지 없음'
+                    )}{' '}
+                    · 옵션 {p.variants.length}개
+                  </div>
+                </div>
+
+                {/* right: actions */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <Link href={`/admin/products/${p.id}`}>Edit</Link>
+
+                  {/* 인라인 가격 수정 */}
+                  <form action={updatePrice} style={{ display: 'flex', gap: 4 }}>
+                    <input type="hidden" name="id" value={p.id} />
+                    <input
+                      name="price"
+                      defaultValue={p.price}
+                      inputMode="numeric"
+                      style={{ width: 100 }}
+                    />
+                    <button type="submit">Save ₩</button>
+                  </form>
+
+                  {/* 첫 옵션 재고 수정 */}
+                  <form
+                    action={updateFirstVariantStock}
+                    style={{ display: 'flex', gap: 4 }}
+                  >
+                    <input type="hidden" name="productId" value={p.id} />
+                    <input
+                      name="stock"
+                      placeholder="stock"
+                      defaultValue={p.variants[0]?.stock ?? 0}
+                      inputMode="numeric"
+                      style={{ width: 80 }}
+                    />
+                    <button type="submit">Save 재고</button>
+                  </form>
+
+                  {/* 공개/비공개 */}
+                  <form action={togglePublish}>
+                    <input type="hidden" name="id" value={p.id} />
+                    <input
+                      type="hidden"
+                      name="next"
+                      value={(!p.published).toString()}
+                    />
+                    <button type="submit" style={{ padding: '4px 8px' }}>
+                      {p.published ? 'Unpublish' : 'Publish'}
+                    </button>
+                  </form>
+
+                  {/* 삭제 */}
+                  <form action={deleteProduct}>
+                    <input type="hidden" name="id" value={p.id} />
+                    <button
+                      type="submit"
+                      style={{
+                        background: '#fee',
+                        border: '1px solid #f88',
+                        padding: '4px 8px',
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        <Pagination total={total} page={page} per={per} />
+      </div>
+    </div>
   );
 }
