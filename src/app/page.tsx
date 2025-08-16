@@ -1,0 +1,40 @@
+// src/app/page.tsx
+import Link from 'next/link';
+import prisma from '@/lib/prisma'; // alias가 안 되면 '../lib/prisma' 로 바꿔서 시도
+export const runtime = 'nodejs';
+
+export default async function Home() {
+  const products = await prisma.product.findMany({
+    orderBy: { createdAt: 'desc' },
+    include: { images: true },
+  });
+
+  // 서버 콘솔에서 갯수 확인용
+  console.log('Home render products count:', products.length);
+
+  return (
+    <main style={{ padding: 24, maxWidth: 960, margin: '0 auto' }}>
+      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 16 }}>Products</h1>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+        {products.map((p) => (
+          <Link
+            key={p.id}
+            href={`/products/${p.slug}`}
+            style={{ border: '1px solid #eee', borderRadius: 12, padding: 12, textDecoration: 'none', color: 'inherit' }}
+          >
+            <div style={{ aspectRatio: '4/5', overflow: 'hidden', borderRadius: 8, background: '#fafafa', display:'flex', alignItems:'center', justifyContent:'center' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {p.images[0]?.url ? (
+                <img src={p.images[0].url} alt={p.name} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+              ) : (
+                <span>no image</span>
+              )}
+            </div>
+            <div style={{ marginTop: 8, fontWeight: 600 }}>{p.name}</div>
+            <div style={{ opacity: 0.7 }}>{p.price.toLocaleString()}원</div>
+          </Link>
+        ))}
+      </div>
+    </main>
+  );
+}
