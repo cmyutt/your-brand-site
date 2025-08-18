@@ -6,17 +6,21 @@ export const runtime = 'nodejs';
 
 type SearchParams = { next?: string; error?: string };
 
-export default function AdminLoginPage({
+export default async function AdminLoginPage({
+  // ✅ Next 15: searchParams 는 Promise 형태
   searchParams,
 }: {
-  searchParams?: SearchParams;
+  searchParams: Promise<SearchParams>;
 }) {
-  // ✅ 서버 액션: export 금지!
+  const sp = await searchParams;
+  const next = sp?.next ?? '/admin/products';
+  const error = sp?.error ? '비밀번호가 올바르지 않습니다.' : '';
+
+  // ✅ 서버 액션들은 export 하지 말 것
   async function loginAction(formData: FormData) {
     'use server';
 
     const pass = String(formData.get('password') ?? '');
-    const next = String(formData.get('next') ?? '/admin/products');
 
     if (!process.env.ADMIN_PASSWORD) {
       throw new Error('ADMIN_PASSWORD 미설정');
@@ -37,16 +41,12 @@ export default function AdminLoginPage({
     redirect(next);
   }
 
-  // (선택) 로그아웃 액션 — 마찬가지로 export 금지
   async function logoutAction() {
     'use server';
     const c = await cookies();
     c.set('admin', '', { path: '/', maxAge: 0 });
     redirect('/admin/login');
   }
-
-  const next = searchParams?.next ?? '/admin/products';
-  const error = searchParams?.error ? '비밀번호가 올바르지 않습니다.' : '';
 
   return (
     <main style={{ maxWidth: 360, margin: '88px auto', padding: 20 }}>
