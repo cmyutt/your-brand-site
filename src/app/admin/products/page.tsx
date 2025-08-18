@@ -22,6 +22,14 @@ function parsePrice(input: FormDataEntryValue | null) {
   return n;
 }
 
+function buildQS(q: Record<string, string | number | undefined>) {
+  const u = new URLSearchParams();
+  Object.entries(q).forEach(([k, v]) => {
+    if (v !== undefined && v !== '') u.set(k, String(v));
+  });
+  return `?${u.toString()}`;
+}
+
 /* ----------------------- server actions ----------------------- */
 // 생성
 async function createProduct(formData: FormData) {
@@ -54,10 +62,7 @@ async function createProduct(formData: FormData) {
       description: description || null,
       images: { create: imageArr },
       variants: {
-        create:
-          variantArr.length > 0
-            ? variantArr
-            : [{ name: 'Default', stock: 0, extra: 0 }],
+        create: variantArr.length > 0 ? variantArr : [{ name: 'Default', stock: 0, extra: 0 }],
       },
       published: true,
     },
@@ -128,23 +133,25 @@ async function searchAction(formData: FormData) {
 
 /* ----------------------- components ----------------------- */
 
-function buildQS(q: Record<string, string | number | undefined>) {
-  const u = new URLSearchParams();
-  Object.entries(q).forEach(([k, v]) => {
-    if (v !== undefined && v !== '') u.set(k, String(v));
-  });
-  return `?${u.toString()}`;
-}
-
-function Pagination({ total, page, per }: { total: number; page: number; per: number }) {
+function Pagination({
+  total,
+  page,
+  per,
+  carry, // 검색/필터 유지
+}: {
+  total: number;
+  page: number;
+  per: number;
+  carry?: { q?: string; only?: string };
+}) {
   const pages = Math.max(1, Math.ceil(total / per));
   const prev = Math.max(1, page - 1);
   const next = Math.min(pages, page + 1);
   return (
     <nav style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-      <a href={buildQS({ page: prev, per })}>← Prev</a>
+      <Link href={buildQS({ ...carry, page: prev, per })}>← Prev</Link>
       <span style={{ opacity: 0.7 }}>Page {page} / {pages}</span>
-      <a href={buildQS({ page: next, per })}>Next →</a>
+      <Link href={buildQS({ ...carry, page: next, per })}>Next →</Link>
     </nav>
   );
 }
@@ -170,33 +177,28 @@ function SearchBar() {
 
 /* ----------------------- page ----------------------- */
 
-// Next 15 표준 searchParams 타입
+// Next 15 표준: searchParams는 Promise
 type SP = Record<string, string | string[] | undefined>;
 
 export default async function AdminProducts({
   searchParams,
 }: {
-  searchParams?: SP;
+  searchParams: Promise<SP>;
 }) {
-  const q =
-    typeof searchParams?.q === 'string' ? searchParams.q.trim() : '';
+  const sp = await searchParams;
+
+  const q = typeof sp?.q === 'string' ? sp.q.trim() : '';
 
   const page =
-    parseInt(
-      typeof searchParams?.page === 'string' ? searchParams.page : '1',
-      10,
-    ) || 1;
+    parseInt(typeof sp?.page === 'string' ? sp.page : '1', 10) || 1;
 
   const perRaw =
-    parseInt(
-      typeof searchParams?.per === 'string' ? searchParams.per : '10',
-      10,
-    ) || 10;
+    parseInt(typeof sp?.per === 'string' ? sp.per : '10', 10) || 10;
   const per = Math.min(50, Math.max(5, perRaw));
 
   const only =
-    typeof searchParams?.only === 'string'
-      ? (searchParams.only as 'published' | 'unpublished' | '')
+    typeof sp?.only === 'string'
+      ? (sp.only as 'published' | 'unpublished' | '')
       : '';
 
   const where: Prisma.ProductWhereInput = {
@@ -302,9 +304,7 @@ export default async function AdminProducts({
               >
                 {/* left */}
                 <div>
-                  <div
-                    style={{ display: 'flex', gap: 8, alignItems: 'center' }}
-                  >
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <strong>{p.name}</strong>
                     <span style={{ opacity: 0.7 }}>{p.slug}</span>
                     <span style={{ opacity: 0.7 }}>
@@ -313,11 +313,7 @@ export default async function AdminProducts({
                   </div>
                   <div style={{ opacity: 0.7, marginTop: 4 }}>
                     {p.images[0]?.url ? (
-                      <a
-                        href={p.images[0].url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
+                      <a href={p.images[0].url} target="_blank" rel="noreferrer">
                         대표이미지
                       </a>
                     ) : (
@@ -344,10 +340,7 @@ export default async function AdminProducts({
                   </form>
 
                   {/* 첫 옵션 재고 수정 */}
-                  <form
-                    action={updateFirstVariantStock}
-                    style={{ display: 'flex', gap: 4 }}
-                  >
+                  <form action={updateFirstVariantStock} style={{ display: 'flex', gap: 4 }}>
                     <input type="hidden" name="productId" value={p.id} />
                     <input
                       name="stock"
@@ -362,11 +355,7 @@ export default async function AdminProducts({
                   {/* 공개/비공개 */}
                   <form action={togglePublish}>
                     <input type="hidden" name="id" value={p.id} />
-                    <input
-                      type="hidden"
-                      name="next"
-                      value={(!p.published).toString()}
-                    />
+                    <input type="hidden" name="next" value={(!p.published).toString()} />
                     <button type="submit" style={{ padding: '4px 8px' }}>
                       {p.published ? 'Unpublish' : 'Publish'}
                     </button>
@@ -377,11 +366,7 @@ export default async function AdminProducts({
                     <input type="hidden" name="id" value={p.id} />
                     <button
                       type="submit"
-                      style={{
-                        background: '#fee',
-                        border: '1px solid #f88',
-                        padding: '4px 8px',
-                      }}
+                      style={{ background: '#fee', border: '1px solid #f88', padding: '4px 8px' }}
                     >
                       Delete
                     </button>
@@ -392,7 +377,7 @@ export default async function AdminProducts({
           ))}
         </ul>
 
-        <Pagination total={total} page={page} per={per} />
+        <Pagination total={total} page={page} per={per} carry={{ q, only }} />
       </div>
     </div>
   );
