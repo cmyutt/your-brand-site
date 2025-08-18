@@ -1,13 +1,13 @@
-// src/app/admin/products/[id]/page.tsx
-import prisma from '@/lib/prisma';
+import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import prisma from '@/lib/prisma';
 
 export const runtime = 'nodejs';
 
 type Params = { params: { id: string } };
 
-// 숫자 파싱 유틸 (콤마 허용)
+// 숫자 파싱 유틸(콤마 허용)
 function parseIntSafe(v: FormDataEntryValue | null, def = 0) {
   const n = Number(String(v ?? '').replace(/[^\d-]/g, ''));
   return Number.isFinite(n) ? n : def;
@@ -15,7 +15,6 @@ function parseIntSafe(v: FormDataEntryValue | null, def = 0) {
 
 /* ----------------------------- 서버 액션 ----------------------------- */
 
-// 상품 기본정보 수정
 async function updateProduct(formData: FormData) {
   'use server';
   const id = String(formData.get('id') || '');
@@ -41,14 +40,12 @@ async function updateProduct(formData: FormData) {
   revalidatePath(`/admin/products/${id}`);
 }
 
-// ✅ 이미지 추가 (nested write 사용)
 async function addImage(formData: FormData) {
   'use server';
   const id = String(formData.get('id') || '');
   const url = String(formData.get('url') || '').trim();
   if (!id || !url) throw new Error('id/url 필요');
 
-  // 현재 이미지 개수로 sort 지정
   const info = await prisma.product.findUnique({
     where: { id },
     select: { _count: { select: { images: true } } },
@@ -63,7 +60,6 @@ async function addImage(formData: FormData) {
   revalidatePath(`/admin/products/${id}`);
 }
 
-// ✅ 이미지 삭제 (nested write 사용)
 async function deleteImage(formData: FormData) {
   'use server';
   const productId = String(formData.get('productId') || '');
@@ -78,7 +74,6 @@ async function deleteImage(formData: FormData) {
   revalidatePath(`/admin/products/${productId}`);
 }
 
-// 옵션(Variant) 추가
 async function addVariant(formData: FormData) {
   'use server';
   const productId = String(formData.get('productId') || '');
@@ -95,7 +90,6 @@ async function addVariant(formData: FormData) {
   revalidatePath(`/admin/products/${productId}`);
 }
 
-// 옵션 수정
 async function updateVariant(formData: FormData) {
   'use server';
   const productId = String(formData.get('productId') || '');
@@ -113,7 +107,6 @@ async function updateVariant(formData: FormData) {
   revalidatePath(`/admin/products/${productId}`);
 }
 
-// 옵션 삭제
 async function deleteVariant(formData: FormData) {
   'use server';
   const productId = String(formData.get('productId') || '');
@@ -141,22 +134,23 @@ export default async function EditProductPage({ params }: Params) {
     },
   });
 
-  if (!product) {
-    redirect('/admin/products');
-  }
+  if (!product) redirect('/admin/products');
 
   return (
     <div style={{ maxWidth: 960, margin: '24px auto', display: 'grid', gap: 24 }}>
-      <a href="/admin/products">← 목록으로</a>
+      <Link href="/admin/products">← 목록으로</Link>
       <h1>상품 편집</h1>
 
       {/* 기본 정보 수정 */}
-      <form action={updateProduct} style={{ display: 'grid', gap: 8, border: '1px solid #eee', padding: 16, borderRadius: 12 }}>
+      <form
+        action={updateProduct}
+        style={{ display: 'grid', gap: 8, border: '1px solid #eee', padding: 16, borderRadius: 12 }}
+      >
         <h2 style={{ fontSize: 18, fontWeight: 700 }}>기본 정보</h2>
         <input type="hidden" name="id" value={product.id} />
         <input name="name" defaultValue={product.name} placeholder="name" required />
         <input name="slug" defaultValue={product.slug} placeholder="slug (영문/하이픈)" required />
-        <input name="price" defaultValue={product.price} inputMode="numeric" placeholder="price (원, 숫자만/콤마 허용)" />
+        <input name="price" defaultValue={product.price} inputMode="numeric" placeholder="price (원, 숫자/콤마 허용)" />
         <textarea name="description" defaultValue={product.description ?? ''} placeholder="description(optional)" />
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <span>Published</span>
@@ -177,12 +171,16 @@ export default async function EditProductPage({ params }: Params) {
         <ul style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
           {product.images.map((img) => (
             <li key={img.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <a href={img.url} target="_blank">{img.url}</a>
+              <a href={img.url} target="_blank" rel="noreferrer">
+                {img.url}
+              </a>
               <small style={{ opacity: 0.6 }}>· sort {img.sort}</small>
               <form action={deleteImage}>
                 <input type="hidden" name="imageId" value={img.id} />
                 <input type="hidden" name="productId" value={product.id} />
-                <button type="submit" style={{ background: '#fee', border: '1px solid #f88', padding: '4px 8px' }}>삭제</button>
+                <button type="submit" style={{ background: '#fee', border: '1px solid #f88', padding: '4px 8px' }}>
+                  삭제
+                </button>
               </form>
             </li>
           ))}
@@ -202,7 +200,10 @@ export default async function EditProductPage({ params }: Params) {
 
         <ul style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
           {product.variants.map((v) => (
-            <li key={v.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center' }}>
+            <li
+              key={v.id}
+              style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center' }}
+            >
               <form action={updateVariant} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <input type="hidden" name="productId" value={product.id} />
                 <input type="hidden" name="id" value={v.id} />
@@ -214,7 +215,9 @@ export default async function EditProductPage({ params }: Params) {
               <form action={deleteVariant}>
                 <input type="hidden" name="productId" value={product.id} />
                 <input type="hidden" name="id" value={v.id} />
-                <button type="submit" style={{ background: '#fee', border: '1px solid #f88', padding: '4px 8px' }}>삭제</button>
+                <button type="submit" style={{ background: '#fee', border: '1px solid #f88', padding: '4px 8px' }}>
+                  삭제
+                </button>
               </form>
             </li>
           ))}

@@ -1,29 +1,33 @@
 {
   "compilerOptions": {
-    "target": "esnext",
-    "module": "esnext",
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowJs": false,
+    "checkJs": false,
+    "jsx": "preserve",
     "strict": true,
+    "noEmit": true,
     "esModuleInterop": true,
-    "moduleResolution": "node",
+    "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
-    "incremental": true,
-    // 우리가 쓰려는 alias 경로
+    "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
       "@/*": [
         "src/*"
       ]
     },
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
+    "types": [
+      "node"
     ],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "noEmit": true,
+    "incremental": true,
     "plugins": [
       {
         "name": "next"
@@ -31,9 +35,11 @@
     ]
   },
   "include": [
-    "**/*.ts",
-    "**/*.tsx",
+    "eslint.config.*",
     "next-env.d.ts",
+    "next.config.*",
+    "postcss.config.*",
+    "src/**/*",
     ".next/types/**/*.ts"
   ],
   "exclude": [
