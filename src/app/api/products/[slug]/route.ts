@@ -1,38 +1,35 @@
-import { NextResponse } from 'next/server';
+// src/app/api/products/[slug]/route.ts
+import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
-// 필요시 캐싱 전략 조정
-export const dynamic = 'force-dynamic';
+// Prisma를 쓰므로 node 런타임을 강제
+export const runtime = 'nodejs';
 
-/**
- * Next 15 표준 시그니처:
- * (req: Request, context: { params: { ... } })
- *  - 두 번째 인자에 커스텀 타입 별칭 금지 (이전 빌드 에러 원인)
- *  - any 사용 금지 (현재 빌드 에러 원인)
- */
-export async function GET(_req: Request, context: { params: { slug: string } }) {
-  const slug = context.params.slug;
+type Params = { slug: string };
 
-  if (!slug) {
-    return NextResponse.json({ error: 'missing slug' }, { status: 400 });
-  }
+export async function GET(
+  _req: NextRequest,
+  // ✅ Next.js 15 타입 규칙: params는 Promise 타입으로 받는다
+  { params }: { params: Promise<Params> }
+) {
+  const { slug } = await params;
 
   try {
     const product = await prisma.product.findUnique({
       where: { slug },
       include: {
         images: true,
-        variants: true,
+        variants: { orderBy: { name: 'asc' } },
       },
     });
 
     if (!product) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Not Found' }, { status: 404 });
     }
 
-    return NextResponse.json(product);
+    return NextResponse.json(product, { status: 200 });
   } catch (err) {
-    console.error('GET /api/products/[slug] error:', err);
-    return NextResponse.json({ error: 'server error' }, { status: 500 });
+    console.error('[GET /api/products/[slug]]', err);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
