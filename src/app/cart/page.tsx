@@ -1,138 +1,149 @@
+// src/app/cart/page.tsx
 import Link from 'next/link';
-import { revalidatePath } from 'next/cache';
 import AutoSubmitNumber from '@/components/AutoSubmitNumber';
-import { getCart, updateQty, removeLine, clearCart } from '@/lib/cart';
+import { getCart, clearCart } from '@/lib/cart';
+import { removeFromCart, updateCartQty, clearCartAction } from './actions';
 
 export const runtime = 'nodejs';
 
 export default async function CartPage() {
   const items = await getCart();
-
-  async function updateQtyAction(formData: FormData) {
-    'use server';
-    const productId = String(formData.get('productId') || '');
-    const variantId = (formData.get('variantId') as string) || null;
-    const qty = Math.max(1, parseInt(String(formData.get('qty') || '1'), 10) || 1);
-    await updateQty({ productId, variantId, qty });
-    revalidatePath('/cart');
-  }
-
-  async function removeLineAction(formData: FormData) {
-    'use server';
-    const productId = String(formData.get('productId') || '');
-    const variantId = (formData.get('variantId') as string) || null;
-    await removeLine({ productId, variantId });
-    revalidatePath('/cart');
-  }
-
-  async function clearAction() {
-    'use server';
-    await clearCart();
-    revalidatePath('/cart');
-  }
-
-  const calcTotal = () =>
-    items.reduce((sum, { product, variant, line }) => {
-      const unit = product.price + (variant?.extra ?? 0);
-      return sum + unit * line.qty;
-    }, 0);
-
-  const total = calcTotal();
+  const total = items.reduce((a, b) => a + b.subtotal, 0);
 
   return (
-    <main style={{ maxWidth: 960, margin: '24px auto' }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 16 }}>장바구니</h1>
+    <div style={{ maxWidth: 900, margin: '24px auto', display: 'grid', gap: 16 }}>
+      <h1 style={{ fontSize: 24, fontWeight: 800 }}>장바구니</h1>
 
-      <ul style={{ display: 'grid', gap: 12 }}>
-        {items.map(({ product, variant, line }) => {
-          const unitPrice = product.price + (variant?.extra ?? 0);
-          const subtotal = unitPrice * line.qty;
-          const lineKey = `${line.productId}__${line.variantId ?? 'default'}`;
+      {items.length === 0 ? (
+        <div style={{ padding: 24, border: '1px solid #eee', borderRadius: 12 }}>
+          장바구니가 비었습니다.{' '}
+          <Link href="/">쇼핑 계속하기</Link>
+        </div>
+      ) : (
+        <>
+          <ul style={{ display: 'grid', gap: 12 }}>
+            {items.map((it) => {
+              const lineKey = `${it.product.id}__${it.variant?.id ?? 'null'}`;
+              return (
+                <li
+                  key={lineKey}
+                  style={{ border: '1px solid #eee', borderRadius: 12, padding: 12 }}
+                >
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr auto',
+                      gap: 12,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <strong>{it.product.name}</strong>
+                        {it.variant && (
+                          <span style={{ opacity: 0.7 }}>· {it.variant.name}</span>
+                        )}
+                      </div>
+                      <div style={{ opacity: 0.7, marginTop: 4 }}>
+                        단가 {it.unitPrice.toLocaleString()}원
+                      </div>
+                    </div>
 
-          return (
-            <li
-              key={lineKey}
-              style={{ border: '1px solid #eee', borderRadius: 12, padding: 12 }}
-            >
-              <div
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                      {/* 수량 변경 */}
+                      <form action={updateCartQty} style={{ display: 'inline-block' }}>
+                        <input type="hidden" name="productId" value={it.product.id} />
+                        <input
+                          type="hidden"
+                          name="variantId"
+                          value={it.variant?.id ?? ''}
+                        />
+                        <AutoSubmitNumber
+                          name="qty"
+                          value={it.line.qty}
+                          min={1}
+                          max={999}
+                          // optimisticUpdate에서 참조할 키/단가
+                          data-line-key={lineKey}
+                          data-unit-price={it.unitPrice}
+                          aria-label="수량"
+                        />
+                      </form>
+
+                      {/* 소계 (낙관적 업데이트용 data-subtotal + id) */}
+                      <span
+                        id={`sub-${lineKey}`}
+                        data-subtotal={String(it.subtotal)}
+                        style={{ width: 96, textAlign: 'right', display: 'inline-block' }}
+                      >
+                        {it.subtotal.toLocaleString()}원
+                      </span>
+
+                      {/* 삭제 */}
+                      <form action={removeFromCart}>
+                        <input type="hidden" name="productId" value={it.product.id} />
+                        <input
+                          type="hidden"
+                          name="variantId"
+                          value={it.variant?.id ?? ''}
+                        />
+                        <button
+                          type="submit"
+                          style={{ padding: '4px 8px', border: '1px solid #eee' }}
+                        >
+                          삭제
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* 하단 합계/액션 */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto',
+              alignItems: 'center',
+              marginTop: 12,
+            }}
+          >
+            <form action={clearCartAction}>
+              <button
+                type="submit"
+                style={{ background: 'transparent', border: '1px solid #ddd', padding: '4px 8px' }}
+              >
+                장바구니 비우기
+              </button>
+            </form>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <strong id="cart-total">{total.toLocaleString()}원</strong>
+              <Link
+                href="/"
+                style={{ border: '1px solid #ddd', padding: '6px 10px', borderRadius: 8 }}
+              >
+                계속 쇼핑
+              </Link>
+
+              {/* ⬇️ 기존 form action={() => {}} 제거하고 단순 링크로 변경 */}
+              <Link
+                href="/checkout"
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr auto',
-                  gap: 12,
-                  alignItems: 'center',
+                  background: '#111',
+                  color: '#fff',
+                  padding: '6px 12px',
+                  borderRadius: 8,
                 }}
               >
-                <div>
-                  <Link href={`/products/${product.slug}`} style={{ fontWeight: 700 }}>
-                    {product.name}
-                  </Link>
-                  <span style={{ opacity: 0.7, marginLeft: 8 }}>
-                    · {variant?.name ?? '기본'} · 재고 {variant?.stock ?? 0}
-                  </span>
-
-                  <div style={{ opacity: 0.7, marginTop: 8 }}>
-                    단가 {unitPrice.toLocaleString()}원 · 소계{' '}
-                    <b
-                      id={`sub-${lineKey}`}
-                      data-subtotal={String(subtotal)}
-                    >
-                      {subtotal.toLocaleString()}원
-                    </b>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <form action={updateQtyAction} style={{ display: 'inline' }}>
-                    <input type="hidden" name="productId" value={line.productId} />
-                    <input type="hidden" name="variantId" value={line.variantId ?? ''} />
-                    <AutoSubmitNumber
-                      name="qty"
-                      value={line.qty}
-                      min={1}
-                      max={999}
-                      aria-label="수량"
-                      data-line-key={lineKey}
-                      data-unit-price={String(unitPrice)}
-                    />
-                  </form>
-
-                  <form action={removeLineAction} style={{ display: 'inline' }}>
-                    <input type="hidden" name="productId" value={line.productId} />
-                    <input type="hidden" name="variantId" value={line.variantId ?? ''} />
-                    <button
-                      type="submit"
-                      style={{
-                        background: '#fee',
-                        border: '1px solid #f88',
-                        padding: '4px 8px',
-                        borderRadius: 6,
-                      }}
-                    >
-                      삭제
-                    </button>
-                  </form>
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-
-      <div style={{ marginTop: 24, display: 'flex', gap: 12, alignItems: 'center' }}>
-        <strong>
-          총 <span id="cart-total">{total.toLocaleString()}원</span>
-        </strong>
-
-        <form action={clearAction}>
-          <button type="submit" style={{ padding: '4px 8px' }}>
-            전체 비우기
-          </button>
-        </form>
-
-        <a href="/checkout" style={{ padding: '4px 8px', border: '1px solid #ccc' }}>
-          주문하기
-        </a>
-      </div>
-    </main>
+                결제 진행
+              </Link>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

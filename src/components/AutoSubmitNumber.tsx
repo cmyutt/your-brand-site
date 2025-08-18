@@ -7,13 +7,6 @@ type Props = React.InputHTMLAttributes<HTMLInputElement> & {
   value: number;
 };
 
-/**
- * 사용 전제:
- * - input에 data-line-key="productId__variantId" 형태로 고유키 제공
- * - input에 data-unit-price="19900" 단가 제공 (정수, 원 단위)
- * - 각 라인 소계 엘리먼트는 id="sub-<lineKey>" 이고 data-subtotal="<정수>" 를 가짐
- * - 총액 엘리먼트는 id="cart-total"
- */
 export default function AutoSubmitNumber({
   value,
   style,
@@ -33,44 +26,45 @@ export default function AutoSubmitNumber({
     return Math.min(hi, Math.max(lo, n));
   };
 
-  /** 소계/총액을 낙관적으로 즉시 갱신 */
+  /** 소계/총액 낙관적 업데이트 (깜빡임/잘못된 합계 방지) */
   const optimisticUpdate = (nextQty: number) => {
     const el = ref.current;
     if (!el) return;
 
     const lineKey = el.dataset.lineKey; // ex) productId__variantId
     const unit = Number(el.dataset.unitPrice || 0);
-    const newLineSubtotal = unit * nextQty;
+    const newSub = Math.max(0, unit * nextQty);
 
-    // 1) 해당 라인의 data-subtotal 및 텍스트 먼저 갱신
-    if (lineKey) {
-      const subEl = document.getElementById(`sub-${lineKey}`) as
-        | (HTMLElement & { dataset: DOMStringMap })
-        | null;
-      if (subEl) {
-        subEl.dataset.subtotal = String(newLineSubtotal);
-        subEl.textContent = newLineSubtotal.toLocaleString() + '원';
+    // DOM 업데이트는 한 프레임에 모아서 수행
+    requestAnimationFrame(() => {
+      // 현재 라인 소계 텍스트 + 데이터 동기화
+      if (lineKey) {
+        const subEl = document.getElementById(
+          `sub-${lineKey}`
+        ) as HTMLElement | null;
+        if (subEl) {
+          subEl.dataset.subtotal = String(newSub);
+          subEl.textContent = newSub.toLocaleString() + '원';
+        }
       }
-    }
 
-    // 2) 모든 라인의 data-subtotal 합산 → 총액 텍스트 갱신
-    const totalEl = document.getElementById('cart-total') as
-      | (HTMLElement & { dataset: DOMStringMap })
-      | null;
-    if (totalEl) {
-      const allSubs = Array.from(
-        document.querySelectorAll('[data-subtotal]'),
-      ) as (HTMLElement & { dataset: DOMStringMap })[];
+      // 전체 합계는 모든 소계의 data-subtotal을 이용하되
+      // 현재 라인은 방금 계산한 값으로 치환해서 합산
+      const subs = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-subtotal]')
+      );
+      const total = subs.reduce((acc, s) => {
+        if (lineKey && s.id === `sub-${lineKey}`) return acc + newSub;
+        const v = Number(s.dataset.subtotal || '0');
+        return acc + (Number.isFinite(v) ? v : 0);
+      }, 0);
 
-      const newSum = allSubs
-        .map((s) => Number(s.dataset.subtotal || '0'))
-        .reduce((a, b) => a + b, 0);
-
-      totalEl.textContent = newSum.toLocaleString() + '원';
-    }
+      const totalEl = document.getElementById('cart-total');
+      if (totalEl) totalEl.textContent = total.toLocaleString() + '원';
+    });
   };
 
-  /** 제출을 한 틱 뒤로 미뤄 Router 업데이트 경고 제거 */
+  /** 제출을 한 틱 뒤로 미뤄 Router 경고 제거 */
   const deferSubmit = (form?: HTMLFormElement | null) => {
     if (!form) return;
     setTimeout(() => {
@@ -78,41 +72,25 @@ export default function AutoSubmitNumber({
         form.requestSubmit();
       } catch {
         const btn = form.querySelector(
-          'button[type="submit"]',
+          'button[type="submit"]'
         ) as HTMLButtonElement | null;
         btn?.click();
       }
     }, 0);
   };
 
-  const commit = (next: number, form?: HTMLFormElement | null) => {
-    const fixed = clamp(next);
-    setVal(fixed);
-    if (ref.current) ref.current.value = String(fixed);
-    optimisticUpdate(fixed);
-    deferSubmit(form);
-  };
-
   const handleChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
-    // valueAsNumber가 NaN일 수 있으니 보강
-    const raw = e.currentTarget.value;
-    const num = Number.isFinite(e.currentTarget.valueAsNumber)
-      ? e.currentTarget.valueAsNumber
-      : parseInt(raw.replace(/[^\d]/g, ''), 10);
+    const v = e.currentTarget.valueAsNumber;
+    const next = Number.isFinite(v)
+      ? clamp(v)
+      : clamp(
+          parseInt(e.currentTarget.value.replace(/[^\d]/g, ''), 10) || value
+        );
 
-    const next = Number.isFinite(num) ? num : value;
-    commit(next, e.currentTarget.form);
-  };
-
-  const handleBlur: React.FocusEventHandler<HTMLInputElement> = (e) => {
-    // 빈 문자열로 남았을 때 min으로 복원
-    if (e.currentTarget.value.trim() === '') {
-      commit((min as number) ?? 1, e.currentTarget.form);
-    } else {
-      // 이미 숫자라면 clamp만 보장
-      const num = parseInt(e.currentTarget.value.replace(/[^\d]/g, ''), 10);
-      commit(Number.isFinite(num) ? num : value, e.currentTarget.form);
-    }
+    setVal(next);
+    if (ref.current) ref.current.value = String(next);
+    optimisticUpdate(next);
+    deferSubmit(e.currentTarget.form);
   };
 
   const stepClick = (delta: number) => {
@@ -151,7 +129,6 @@ export default function AutoSubmitNumber({
         inputMode="numeric"
         value={val}
         onChange={handleChange}
-        onBlur={handleBlur}
         min={min ?? 1}
         max={max ?? 999}
         step={step ?? 1}

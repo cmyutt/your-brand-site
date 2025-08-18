@@ -1,67 +1,23 @@
-// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-  // 너한테 맞춘 출력 경로(이전 로그대로)
-}
-
-enum OrderStatus {
-  PENDING
-  PAID
-  FULFILLED
-  CANCELED
-  REFUNDED
-}
-
-model Product {
-  id          String        @id @default(cuid())
-  name        String
-  slug        String        @unique
-  description String?
-  price       Int
-  published   Boolean       @default(true) // ← 추가!
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  images      ProductImage[]
-  variants    Variant[]
-  orderItems  OrderItem[]
-}
-
-model ProductImage {
-  id        String   @id @default(cuid())
-  url       String
-  alt       String?
-  sort      Int      @default(0)
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  productId String
-}
-
-model Variant {
-  id        String   @id @default(cuid())
-  name      String
-  stock     Int      @default(0)
-  extra     Int      @default(0)
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  productId String
-  orderItems OrderItem[]
-}
-
 model Customer {
-  id        String   @id @default(cuid())
+  id        String   @id
   email     String   @unique
   name      String?
   createdAt DateTime @default(now())
-  orders    Order[]
+  Order     Order[]
 }
 
 model Order {
-  id           String      @id @default(cuid())
-  customer     Customer?   @relation(fields: [customerId], references: [id])
+  id           String      @id
   customerId   String?
   status       OrderStatus @default(PENDING)
   totalAmount  Int
@@ -71,18 +27,59 @@ model Order {
   addressLine2 String?
   postalCode   String
   createdAt    DateTime    @default(now())
-  items        OrderItem[]
+  Customer     Customer?   @relation(fields: [customerId], references: [id])
+  OrderItem    OrderItem[]
 }
 
 model OrderItem {
-  id        String   @id @default(cuid())
-  order     Order    @relation(fields: [orderId], references: [id])
+  id        String   @id
   orderId   String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   productId String
-  // 옵션(Variant)이 지워져도 주문 기록은 남겨야 하니 SetNull 권장
-  variant   Variant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   variantId String?
   unitPrice Int
   qty       Int
+  Order     Order    @relation(fields: [orderId], references: [id])
+  Product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  Variant   Variant? @relation(fields: [variantId], references: [id])
+}
+
+model Product {
+  id           String         @id
+  name         String
+  slug         String         @unique
+  description  String?
+  price        Int
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime
+  published    Boolean        @default(true)
+  OrderItem    OrderItem[]
+  ProductImage ProductImage[]
+  Variant      Variant[]
+}
+
+model ProductImage {
+  id        String  @id
+  url       String
+  alt       String?
+  sort      Int     @default(0)
+  productId String
+  Product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Variant {
+  id        String      @id
+  name      String
+  stock     Int         @default(0)
+  extra     Int         @default(0)
+  productId String
+  OrderItem OrderItem[]
+  Product   Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FULFILLED
+  CANCELED
+  REFUNDED
 }

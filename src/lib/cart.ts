@@ -3,18 +3,15 @@ import 'server-only';
 import { cookies } from 'next/headers';
 import prisma from '@/lib/prisma';
 
-/** 쿠키 키/만료 */
 const CART_COOKIE = 'cart';
 const MAX_AGE = 60 * 60 * 24 * 30;
 
-/** 쿠키에 저장되는 라인 구조 */
 export type CartLine = {
   productId: string;
   variantId: string | null;
   qty: number;
 };
 
-/** 화면 표시용 아이템 구조 */
 export type CartItem = {
   product: { id: string; slug: string; name: string; price: number };
   variant: { id: string; name: string; stock: number | null; extra: number } | null;
@@ -23,9 +20,9 @@ export type CartItem = {
   subtotal: number;
 };
 
-/* ---------------- internal cookie helpers (Next 15 ⇒ await cookies()) ---------------- */
+/* ---------------- cookie helpers ---------------- */
 
-async function readLines(): Promise<CartLine[]> {
+const readLines = async (): Promise<CartLine[]> => {
   const c = (await cookies()).get(CART_COOKIE)?.value;
   if (!c) return [];
   try {
@@ -41,9 +38,9 @@ async function readLines(): Promise<CartLine[]> {
   } catch {
     return [];
   }
-}
+};
 
-async function writeLines(lines: CartLine[]) {
+const writeLines = async (lines: CartLine[]) => {
   const clean = lines.filter((l) => l.qty > 0);
   (await cookies()).set(CART_COOKIE, JSON.stringify(clean), {
     path: '/',
@@ -52,12 +49,11 @@ async function writeLines(lines: CartLine[]) {
     secure: process.env.NODE_ENV === 'production',
     maxAge: MAX_AGE,
   });
-}
+};
 
 /* ---------------- public APIs ---------------- */
 
-/** 장바구니 상세(가격 계산 포함) */
-export async function getCart(): Promise<CartItem[]> {
+export const getCart = async (): Promise<CartItem[]> => {
   const lines = await readLines();
   if (lines.length === 0) return [];
 
@@ -92,27 +88,24 @@ export async function getCart(): Promise<CartItem[]> {
     };
   });
 
-  // 깨진 라인 정리
   const fixed = items.filter((it) => it.line.qty > 0 && it.product.slug !== '');
   if (fixed.length !== items.length) {
     await writeLines(fixed.map((it) => it.line));
     return fixed;
   }
   return items;
-}
+};
 
-/** 라인 추가(동일 productId+variantId는 수량 누적) */
-export async function addLine(input: { productId: string; variantId: string | null; qty: number }) {
+export const addLine = async (input: { productId: string; variantId: string | null; qty: number }) => {
   const qty = Math.max(1, parseInt(String(input.qty || 1), 10) || 1);
   const lines = await readLines();
   const idx = lines.findIndex((l) => l.productId === input.productId && l.variantId === input.variantId);
   if (idx >= 0) lines[idx].qty += qty;
   else lines.unshift({ productId: input.productId, variantId: input.variantId, qty });
   await writeLines(lines);
-}
+};
 
-/** 수량 설정 */
-export async function updateQty(input: { productId: string; variantId: string | null; qty: number }) {
+export const updateQty = async (input: { productId: string; variantId: string | null; qty: number }) => {
   const qty = Math.max(1, parseInt(String(input.qty || 1), 10) || 1);
   const lines = await readLines();
   const idx = lines.findIndex((l) => l.productId === input.productId && l.variantId === input.variantId);
@@ -120,17 +113,21 @@ export async function updateQty(input: { productId: string; variantId: string | 
     lines[idx].qty = qty;
     await writeLines(lines);
   }
-}
+};
 
-/** 라인 제거 */
-export async function removeLine(input: { productId: string; variantId: string | null }) {
+export const removeLine = async (input: { productId: string; variantId: string | null }) => {
   const lines = (await readLines()).filter(
     (l) => !(l.productId === input.productId && l.variantId === input.variantId),
   );
   await writeLines(lines);
-}
+};
 
-/** 전체 비우기 */
-export async function clearCart() {
+export const clearCart = async () => {
   await writeLines([]);
-}
+};
+
+// 추가로 한 번 더 명시 export (정적분석 꼬임 방지)
+export {
+  readLines as _readLinesInternal,
+  writeLines as _writeLinesInternal,
+};
