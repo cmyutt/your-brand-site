@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
 
 // 관계 포함 타입
 type ProductWithRels = Prisma.ProductGetPayload<{
-  include: { images: true; variants: true };
+  include: { images: true; variants: { orderBy: { name: 'asc' } } };
 }>;
 
 /* ----------------------- util ----------------------- */
@@ -34,6 +34,7 @@ function buildQS(q: Record<string, string | number | undefined>) {
 // 생성
 async function createProduct(formData: FormData) {
   'use server';
+
   const name = String(formData.get('name') || '').trim();
   const slug = String(formData.get('slug') || '').trim();
   const price = parsePrice(formData.get('price'));
@@ -42,17 +43,17 @@ async function createProduct(formData: FormData) {
   const variantsRaw = String(formData.get('variants') || '').trim();
   if (!name || !slug) throw new Error('name/slug 필요');
 
-  const imageArr = imagesRaw
+  const imageArr: Prisma.ProductImageCreateWithoutProductInput[] = imagesRaw
     .split('\n')
     .map((s) => s.trim())
     .filter(Boolean)
     .map((url, i) => ({ url, sort: i }));
 
-  const variantArr = variantsRaw
+  const variantArr: Prisma.VariantCreateWithoutProductInput[] = variantsRaw
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
-    .map((name) => ({ name, stock: 0, extra: 0 }));
+    .map((v) => ({ name: v, stock: 0, extra: 0 }));
 
   await prisma.product.create({
     data: {
@@ -62,7 +63,10 @@ async function createProduct(formData: FormData) {
       description: description || null,
       images: { create: imageArr },
       variants: {
-        create: variantArr.length > 0 ? variantArr : [{ name: 'Default', stock: 0, extra: 0 }],
+        create:
+          variantArr.length > 0
+            ? variantArr
+            : [{ name: 'Default', stock: 0, extra: 0 }],
       },
       published: true,
     },
@@ -137,7 +141,7 @@ function Pagination({
   total,
   page,
   per,
-  carry, // 검색/필터 유지
+  carry,
 }: {
   total: number;
   page: number;
@@ -177,13 +181,13 @@ function SearchBar() {
 
 /* ----------------------- page ----------------------- */
 
-// Next 15 표준: searchParams는 Promise
+// Next 15: searchParams는 Promise
 type SP = Record<string, string | string[] | undefined>;
 
 export default async function AdminProducts({
   searchParams,
 }: {
-  searchParams: Promise<SP>;
+  searchParams: Promise<SP>; // ✅ Promise<SP>
 }) {
   const sp = await searchParams;
 
@@ -229,7 +233,6 @@ export default async function AdminProducts({
 
   return (
     <div style={{ display: 'grid', gap: 24 }}>
-      {/* 검색/필터 */}
       <SearchBar />
 
       {/* 생성 폼 */}

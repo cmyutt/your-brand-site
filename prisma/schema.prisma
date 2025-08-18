@@ -9,15 +9,15 @@ datasource db {
 }
 
 model Customer {
-  id        String   @id
+  id        String   @id @default(uuid())
   email     String   @unique
   name      String?
   createdAt DateTime @default(now())
-  Order     Order[]
+  orders    Order[]
 }
 
 model Order {
-  id           String      @id
+  id           String      @id @default(uuid())
   customerId   String?
   status       OrderStatus @default(PENDING)
   totalAmount  Int
@@ -27,53 +27,58 @@ model Order {
   addressLine2 String?
   postalCode   String
   createdAt    DateTime    @default(now())
-  Customer     Customer?   @relation(fields: [customerId], references: [id])
-  OrderItem    OrderItem[]
+
+  customer Customer?   @relation(fields: [customerId], references: [id])
+  items    OrderItem[]
 }
 
 model OrderItem {
-  id        String   @id
+  id        String  @id @default(uuid())
   orderId   String
   productId String
   variantId String?
   unitPrice Int
   qty       Int
-  Order     Order    @relation(fields: [orderId], references: [id])
-  Product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  Variant   Variant? @relation(fields: [variantId], references: [id])
+
+  order   Order    @relation(fields: [orderId], references: [id])
+  product Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant Variant? @relation(fields: [variantId], references: [id])
 }
 
 model Product {
-  id           String         @id
-  name         String
-  slug         String         @unique
-  description  String?
-  price        Int
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime
-  published    Boolean        @default(true)
-  OrderItem    OrderItem[]
-  ProductImage ProductImage[]
-  Variant      Variant[]
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  price       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  published   Boolean  @default(true)
+
+  images     ProductImage[]
+  variants   Variant[]
+  orderItems OrderItem[]
 }
 
 model ProductImage {
-  id        String  @id
+  id        String  @id @default(uuid())
   url       String
   alt       String?
   sort      Int     @default(0)
   productId String
-  Product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
 model Variant {
-  id        String      @id
+  id        String @id @default(uuid())
   name      String
-  stock     Int         @default(0)
-  extra     Int         @default(0)
+  stock     Int    @default(0)
+  extra     Int    @default(0)
   productId String
-  OrderItem OrderItem[]
-  Product   Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
 }
 
 enum OrderStatus {
