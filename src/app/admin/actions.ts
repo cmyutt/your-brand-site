@@ -1,12 +1,13 @@
-// src/app/admin/actions.ts
 'use server';
 
-import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
-export async function logoutAction(_: FormData) {
-  // 로그인 페이지로 리다이렉트
-  const res = NextResponse.redirect('/admin/login');
-  // 쿠키 제거
-  res.cookies.set('admin', '', { path: '/', maxAge: 0 });
-  return res;
+export async function logoutAction() {
+  // admin 세션 쿠키 삭제 (set으로 무효화)
+  const cookieStore = await cookies();
+  cookieStore.set('admin', '', { path: '/', maxAge: 0 });
+
+  // 로그인 페이지로 이동
+  redirect('/admin/login');
 }

@@ -4,7 +4,8 @@ import { logoutAction } from "./actions"; // 서버 액션은 가져오기만 (r
 
 export const runtime = "nodejs"; // 필요 없으면 지워도 됨
 
-export default function AdminLayout({ children }: { children: ReactNode }) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+
   return (
     <div>
       <header

@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 import Link from 'next/link';
 import prisma from '@/lib/prisma'; // alias가 안 되면 '../lib/prisma' 로 바꿔서 시도
 export const runtime = 'nodejs';
