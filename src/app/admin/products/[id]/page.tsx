@@ -1,38 +1,43 @@
-import prisma from '@/lib/prisma';
+import prisma from "@/lib/prisma";
+import type { Variant } from "@prisma/client";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
-type Variant = {
-  id: string;
-  name: string;
-  stock: number | null;
-  extra: number | null;
-};
-
+// ✅ Next.js 15에 맞춘 타입 지정
 export default async function EditProductPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  // ✅ params가 Promise이므로 await 필요
+  const { id } = await params;
+
   const product = await prisma.product.findUniqueOrThrow({
-    where: { id: params.id },
-    include: { variants: { orderBy: { name: 'asc' } }, images: true },
+    where: { id },
+    include: { variants: { orderBy: { name: "asc" } }, images: true },
   });
 
   return (
-    <section style={{ display: 'grid', gap: 12 }}>
+    <section style={{ display: "grid", gap: 12 }}>
       <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>옵션</h2>
 
-      <ul style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
+      <ul style={{ display: "grid", gap: 8, marginBottom: 12 }}>
         {product.variants.map((v: Variant) => (
           <li
             key={v.id}
-            style={{ display: 'flex', gap: 8, alignItems: 'center' }}
+            style={{ display: "flex", gap: 8, alignItems: "center" }}
           >
-            <form action="/admin/products/update-variant" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <form
+              action="/admin/products/update-variant"
+              style={{ display: "flex", gap: 8, alignItems: "center" }}
+            >
               <input type="hidden" name="productId" value={product.id} />
               <input type="hidden" name="id" value={v.id} />
-              <input name="name" placeholder="name" defaultValue={v.name || ''} />
+              <input
+                name="name"
+                placeholder="name"
+                defaultValue={v.name || ""}
+              />
               <input
                 name="stock"
                 inputMode="numeric"
@@ -56,9 +61,9 @@ export default async function EditProductPage({
               <button
                 type="submit"
                 style={{
-                  background: '#fee',
-                  border: '1px solid #f88',
-                  padding: '4px 8px',
+                  background: "#fee",
+                  border: "1px solid #f88",
+                  padding: "4px 8px",
                 }}
               >
                 삭제
@@ -74,7 +79,7 @@ export default async function EditProductPage({
       {/* 새 옵션 추가 */}
       <form
         action="/admin/products/create-variant"
-        style={{ display: 'flex', gap: 8, alignItems: 'center' }}
+        style={{ display: "flex", gap: 8, alignItems: "center" }}
       >
         <input type="hidden" name="productId" value={product.id} />
         <input name="name" placeholder="name (예: S)" />
