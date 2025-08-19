@@ -30,6 +30,12 @@ function buildQS(q: Record<string, string | number | undefined>) {
   return `?${u.toString()}`;
 }
 
+function revalidateAdminAndStore() {
+  revalidatePath('/admin/products');
+  revalidatePath('/');         // 홈에 리스트가 있을 때
+  revalidatePath('/products'); // /products 페이지를 별도로 쓰는 경우 대비
+}
+
 /* ----------------------- server actions ----------------------- */
 // 생성
 async function createProduct(formData: FormData) {
@@ -72,7 +78,7 @@ async function createProduct(formData: FormData) {
     },
   });
 
-  revalidatePath('/admin/products');
+  revalidateAdminAndStore();
 }
 
 // 삭제 (CASCADE 전제)
@@ -81,7 +87,7 @@ async function deleteProduct(formData: FormData) {
   const id = String(formData.get('id') || '');
   if (!id) throw new Error('id 필요');
   await prisma.product.delete({ where: { id } });
-  revalidatePath('/admin/products');
+  revalidateAdminAndStore();
 }
 
 // 인라인 가격 수정
@@ -91,7 +97,7 @@ async function updatePrice(formData: FormData) {
   const price = parsePrice(formData.get('price'));
   if (!id) throw new Error('id 필요');
   await prisma.product.update({ where: { id }, data: { price } });
-  revalidatePath('/admin/products');
+  revalidateAdminAndStore();
 }
 
 // 첫 번째 옵션 재고 수정(예시)
@@ -109,7 +115,7 @@ async function updateFirstVariantStock(formData: FormData) {
   if (!v) throw new Error('Variant 없음');
 
   await prisma.variant.update({ where: { id: v.id }, data: { stock } });
-  revalidatePath('/admin/products');
+  revalidateAdminAndStore();
 }
 
 // 공개/비공개 토글
@@ -119,7 +125,7 @@ async function togglePublish(formData: FormData) {
   const next = String(formData.get('next') || '') === 'true';
   if (!id) throw new Error('id 필요');
   await prisma.product.update({ where: { id }, data: { published: next } });
-  revalidatePath('/admin/products');
+  revalidateAdminAndStore(); // ✅ 스토어/관리자 모두 갱신
 }
 
 // 검색 액션
