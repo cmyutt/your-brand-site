@@ -3,11 +3,17 @@ import Link from 'next/link';
 
 export const runtime = 'nodejs';
 
-type Params = { params: { id: string } };
+// ✅ Next.js 15에서는 params가 Promise로 전달됨
+export default async function OrderSuccessPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  // Promise 풀기
+  const { id } = await params;
 
-export default async function OrderSuccessPage({ params }: Params) {
   const order = await prisma.order.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       customer: { select: { name: true, email: true } },
       items: {
@@ -37,7 +43,9 @@ export default async function OrderSuccessPage({ params }: Params) {
   return (
     <div style={{ maxWidth: 720, margin: '24px auto', display: 'grid', gap: 12 }}>
       <h1>주문 완료</h1>
-      <p>주문번호: <strong>{order.id}</strong></p>
+      <p>
+        주문번호: <strong>{order.id}</strong>
+      </p>
       <p>
         주문자: <strong>{order.customer?.name}</strong>
         {order.customer?.email ? ` · ${order.customer.email}` : ''}
@@ -47,14 +55,22 @@ export default async function OrderSuccessPage({ params }: Params) {
         {order.items.map((it) => (
           <li key={it.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span>
-              {it.product?.name}{it.variant ? ` · ${it.variant.name}` : ''} × {it.qty}
+              {it.product?.name}
+              {it.variant ? ` · ${it.variant.name}` : ''} × {it.qty}
             </span>
             <span>{(it.unitPrice * it.qty).toLocaleString()}원</span>
           </li>
         ))}
       </ul>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #ddd', paddingTop: 6 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          borderTop: '1px dashed #ddd',
+          paddingTop: 6,
+        }}
+      >
         <span>총액</span>
         <strong>{total.toLocaleString()}원</strong>
       </div>
