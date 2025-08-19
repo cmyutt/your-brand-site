@@ -30,6 +30,8 @@ model Order {
 
   customer Customer?   @relation(fields: [customerId], references: [id])
   items    OrderItem[]
+
+  @@index([customerId])
 }
 
 model OrderItem {
@@ -40,9 +42,17 @@ model OrderItem {
   unitPrice Int
   qty       Int
 
+  // 스냅샷 필드(주문 시점의 정보 보존)
+  name     String?
+  subtotal Int?
+
   order   Order    @relation(fields: [orderId], references: [id])
   product Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  variant Variant? @relation(fields: [variantId], references: [id])
+  variant Variant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([variantId])
 }
 
 model Product {
@@ -68,6 +78,9 @@ model ProductImage {
   productId String
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@unique([productId, sort]) // 한 상품 내 sort 고유
 }
 
 model Variant {
@@ -79,6 +92,8 @@ model Variant {
 
   product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
   orderItems OrderItem[]
+
+  @@index([productId])
 }
 
 enum OrderStatus {
