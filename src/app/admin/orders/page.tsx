@@ -14,13 +14,21 @@ export default async function AdminOrdersPage() {
     take: 50,
   });
 
+  // Prisma에서 반환된 타입을 자동으로 추론
+  type OrderWithRelations = typeof orders[number];
+
   return (
     <div style={{ maxWidth: 960, margin: '24px auto', display: 'grid', gap: 16 }}>
       <h1>주문 관리</h1>
 
       <ul style={{ display: 'grid', gap: 8 }}>
-        {orders.map((o) => {
-          const total = o.totalAmount ?? o.items.reduce((a, it) => a + it.unitPrice * it.qty, 0);
+        {orders.map((o: OrderWithRelations) => {
+          const total =
+            o.totalAmount ??
+            o.items.reduce(
+              (a: number, it: { unitPrice: number; qty: number }) => a + it.unitPrice * it.qty,
+              0
+            );
 
           return (
             <li

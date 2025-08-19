@@ -1,39 +1,43 @@
-// src/app/admin/layout.tsx
-import type { ReactNode } from 'react';
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { logoutAction } from "./actions"; // 서버 액션은 가져오기만 (re-export 금지)
 
-export async function logoutAction() {
-  'use server';
-  const jar = await cookies();
-  jar.set('admin', '', { path: '/', maxAge: 0 });
-  redirect('/admin/login');
-}
+export const runtime = "nodejs"; // 필요 없으면 지워도 됨
 
-export default async function AdminLayout({ children }: { children: ReactNode }) {
-  const jar = await cookies();
-  const isAuthed = jar.get('admin')?.value === '1';
-
+export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <section style={{ maxWidth: 960, margin: '24px auto', padding: 16 }}>
-      <div
+    <div>
+      <header
         style={{
-          padding: 16,
-          borderBottom: '1px solid #eee',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          marginBottom: 16,
+          display: "flex",
+          gap: 16,
+          padding: "12px 16px",
+          borderBottom: "1px solid #eee",
+          alignItems: "center",
+          justifyContent: "space-between",
         }}
       >
-        <strong>Admin</strong>
-        {isAuthed && (
-          <form action={logoutAction} style={{ marginLeft: 'auto' }}>
-            <button type="submit">Logout</button>
-          </form>
-        )}
-      </div>
-      {children}
-    </section>
+        <nav style={{ display: "flex", gap: 12 }}>
+          <Link href="/admin">Dashboard</Link>
+          <Link href="/admin/products">Products</Link>
+          <Link href="/admin/orders">Orders</Link>
+        </nav>
+
+        {/* 서버 액션은 form action으로만 연결 */}
+        {/* TS가 string만 허용해서 에러 → 강제 캐스팅 필요 */}
+        <form action={logoutAction as any}>
+          <button
+            type="submit"
+            style={{ padding: "6px 10px", border: "1px solid #ddd" }}
+          >
+            로그아웃
+          </button>
+        </form>
+      </header>
+
+      <main style={{ padding: 16, maxWidth: 1080, margin: "0 auto" }}>
+        {children}
+      </main>
+    </div>
   );
 }

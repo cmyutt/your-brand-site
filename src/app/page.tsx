@@ -1,10 +1,17 @@
-// src/app/page.tsx
 import Link from 'next/link';
 import prisma from '@/lib/prisma'; // alias가 안 되면 '../lib/prisma' 로 바꿔서 시도
 export const runtime = 'nodejs';
 
+type ProductWithImages = {
+  id: string;
+  slug: string;
+  name: string;
+  price: number;
+  images: { url: string }[];
+};
+
 export default async function Home() {
-  const products = await prisma.product.findMany({
+  const products: ProductWithImages[] = await prisma.product.findMany({
     orderBy: { createdAt: 'desc' },
     include: { images: true },
   });

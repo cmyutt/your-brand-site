@@ -1,8 +1,14 @@
-// src/app/admin/products/[id]/page.tsx
 import prisma from '@/lib/prisma';
 import { redirect } from 'next/navigation';
 
 export const runtime = 'nodejs';
+
+type Variant = {
+  id: string;
+  name: string;
+  stock: number | null;
+  extra: number | null;
+};
 
 export default async function EditProductPage({
   params,
@@ -14,14 +20,12 @@ export default async function EditProductPage({
     include: { variants: { orderBy: { name: 'asc' } }, images: true },
   });
 
-  // … 상단 제품 편집 폼은 그대로라고 가정 …
-
   return (
     <section style={{ display: 'grid', gap: 12 }}>
       <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>옵션</h2>
 
       <ul style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
-        {product.variants.map((v) => (
+        {product.variants.map((v: Variant) => (
           <li
             key={v.id}
             style={{ display: 'flex', gap: 8, alignItems: 'center' }}
