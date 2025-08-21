@@ -3,10 +3,23 @@ import Link from "next/link";
 import prisma from "@/lib/prisma";
 import { OrderStatus, Prisma } from "@prisma/client";
 import { setOrderStatus } from "./_actions";
+import { redirect } from "next/navigation";
 
 export const runtime = "nodejs";
 
 type SP = Record<string, string | string[] | undefined>;
+
+// ✅ 필터 제출용 서버 액션 (서버 컴포넌트에서 onChange 금지 → submit로 처리)
+async function filterAction(formData: FormData) {
+  "use server";
+  const status = String(formData.get("status") || "");
+  const per = String(formData.get("per") || "");
+  const qs = new URLSearchParams();
+  if (status) qs.set("status", status);
+  if (per) qs.set("per", per);
+  qs.set("page", "1");
+  redirect(`/admin/orders?${qs.toString()}`);
+}
 
 export default async function AdminOrdersPage({
   searchParams,
@@ -15,8 +28,10 @@ export default async function AdminOrdersPage({
 }) {
   const sp = await searchParams;
 
-  const page = parseInt((typeof sp?.page === "string" ? sp.page : "1") ?? "1", 10) || 1;
-  const perRaw = parseInt((typeof sp?.per === "string" ? sp.per : "10") ?? "10", 10) || 10;
+  const page =
+    parseInt((typeof sp?.page === "string" ? sp.page : "1") ?? "1", 10) || 1;
+  const perRaw =
+    parseInt((typeof sp?.per === "string" ? sp.per : "10") ?? "10", 10) || 10;
   const per = Math.min(50, Math.max(5, perRaw));
   const s = typeof sp?.status === "string" ? (sp.status as OrderStatus | "") : "";
 
@@ -61,23 +76,8 @@ export default async function AdminOrdersPage({
     <div style={{ maxWidth: 960, margin: "24px auto", display: "grid", gap: 16 }}>
       <h1>주문 관리</h1>
 
-      {/* 상태 필터 */}
-      <form
-        style={{ display: "flex", gap: 8 }}
-        onChange={(e) => {
-          // 서버액션 없이 간단 네비게이션
-          if (typeof window !== "undefined") {
-            const url = new URL(window.location.href);
-            const select = e.target as HTMLSelectElement;
-            if (select.name === "status") {
-              if (select.value) url.searchParams.set("status", select.value);
-              else url.searchParams.delete("status");
-              url.searchParams.set("page", "1");
-              window.location.href = url.toString();
-            }
-          }
-        }}
-      >
+      {/* 상태 필터 (서버 액션 submit) */}
+      <form action={filterAction} style={{ display: "flex", gap: 8 }}>
         <select name="status" defaultValue={s}>
           <option value="">전체</option>
           {statuses.map((st) => (
@@ -86,35 +86,21 @@ export default async function AdminOrdersPage({
             </option>
           ))}
         </select>
-        <select
-          name="per"
-          defaultValue={String(per)}
-          onChange={(e) => {
-            if (typeof window !== "undefined") {
-              const url = new URL(window.location.href);
-              url.searchParams.set("per", e.currentTarget.value);
-              url.searchParams.set("page", "1");
-              window.location.href = url.toString();
-            }
-          }}
-        >
+        <select name="per" defaultValue={String(per)}>
           {[10, 20, 50].map((n) => (
             <option key={n} value={n}>
               {n}개
             </option>
           ))}
         </select>
+        <button type="submit">적용</button>
       </form>
 
       {/* 목록 */}
       <ul style={{ display: "grid", gap: 8 }}>
         {orders.map((o) => {
-          const total =
-            // totalAmount 필드가 이미 있다면 우선 사용
-            // 없다면 아이템 합산
-            // (스키마에 totalAmount가 없다면 이 줄은 자동으로 fallback)
-            (o.totalAmount as number | undefined) ??
-            o.items.reduce((a, it) => a + it.unitPrice * it.qty, 0);
+          // 총액: 라인아이템 합산(정수)
+          const totalWon = o.items.reduce((a, it) => a + it.unitPrice * it.qty, 0);
 
           return (
             <li
@@ -136,13 +122,11 @@ export default async function AdminOrdersPage({
               </div>
 
               <div style={{ opacity: 0.85 }}>
-                {o.customer?.name || "guest"}{" "}
-                {o.customer?.email ? `· ${o.customer.email}` : ""}
+                {o.customer?.name || "guest"}
+                {o.customer?.email ? ` · ${o.customer.email}` : ""}
               </div>
 
-              <div>
-                아이템 {o._count.items}개 · 총액 {total.toLocaleString()}원
-              </div>
+              <div>아이템 {o._count.items}개 · 총액 {totalWon.toLocaleString()}원</div>
 
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <Link href={`/admin/orders/${o.id}`}>Detail</Link>

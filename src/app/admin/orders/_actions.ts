@@ -1,76 +1,94 @@
-// src/app/admin/products/_actions.ts
+// src/app/admin/orders/_actions.ts
 "use server";
 
 import { OrderStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import prisma from "@/lib/prisma";
 
-/* 공통: 숫자 파싱 가드(Int) */
-function parseIntGuard(v: FormDataEntryValue | null, name: string) {
-  const s = String(v ?? "").replace(/[^\d-]/g, "");
-  const n = parseInt(s || "0", 10);
-  if (!Number.isFinite(n) || n < -2147483648 || n > 2147483647) {
-    throw new Error(`${name}는 -2,147,483,648 ~ 2,147,483,647 범위의 정수`);
+function revalidateAdminAndStore() {
+  revalidatePath("/admin/orders");
+  revalidatePath("/");         // 스토어 홈에 요약 뱃지 등이 있다면
+  revalidatePath("/orders");   // 스토어 주문목록/내역이 있다면
+}
+
+/** 재고 조정이 필요한 전이인지 계산 */
+function stockDeltaDirection(oldS: OrderStatus, newS: OrderStatus): -1 | 0 | 1 {
+  // 결제 확정 계열로 들어갈 때(판매 확정) → 재고 감소
+  if (oldS === OrderStatus.PENDING && (newS === OrderStatus.PAID || newS === OrderStatus.FULFILLED)) {
+    return -1;
   }
-  return n;
-}
-
-function revalidateProduct(productId: string) {
-  revalidatePath("/admin/products");
-  revalidatePath(`/admin/products/${productId}`);
-  revalidatePath("/");          // 스토어에 반영 필요 시
-  revalidatePath("/products");  // 스토어 목록 별도 경로 대비
-}
-
-/* 옵션 생성 */
-export async function createVariant(formData: FormData) {
-  const productId = String(formData.get("productId") || "");
-  const name = String(formData.get("name") || "").trim();
-  const stock = parseIntGuard(formData.get("stock"), "stock");
-  const extra = parseIntGuard(formData.get("extra"), "extra");
-  if (!productId || !name) throw new Error("productId/name 필요");
-
-  await prisma.variant.create({
-    data: { productId, name, stock, extra },
-  });
-
-  revalidateProduct(productId);
+  // 확정 상태에서 취소/환불로 돌아갈 때 → 재고 복구
+  if ((oldS === OrderStatus.PAID || oldS === OrderStatus.FULFILLED) &&
+      (newS === OrderStatus.CANCELED || newS === OrderStatus.REFUNDED)) {
+    return 1;
+  }
+  return 0;
 }
 
 export async function setOrderStatus(id: string, status: OrderStatus) {
   if (!id) throw new Error("id 필요");
   if (!Object.values(OrderStatus).includes(status)) throw new Error("잘못된 상태");
 
-  await prisma.order.update({ where: { id }, data: { status } });
-
-  revalidatePath("/admin/orders");
-  revalidatePath("/");
-  revalidatePath("/orders");
-}
-/* 옵션 수정 */
-export async function updateVariant(formData: FormData) {
-  const id = String(formData.get("id") || "");
-  const productId = String(formData.get("productId") || "");
-  const name = String(formData.get("name") || "").trim();
-  const stock = parseIntGuard(formData.get("stock"), "stock");
-  const extra = parseIntGuard(formData.get("extra"), "extra");
-  if (!id || !productId) throw new Error("id/productId 필요");
-
-  await prisma.variant.update({
+  // 기존 상태 + 라인아이템 조회
+  const order = await prisma.order.findUnique({
     where: { id },
-    data: { name, stock, extra },
+    include: {
+      items: {
+        select: { id: true, qty: true, variantId: true },
+      },
+    },
+  });
+  if (!order) throw new Error("주문이 존재하지 않습니다");
+  if (order.status === status) {
+    revalidateAdminAndStore();
+    return;
+  }
+
+  const dir = stockDeltaDirection(order.status, status);
+
+  // 트랜잭션으로 재고/주문 동시 반영
+  await prisma.$transaction(async (tx) => {
+    // 재고 조정이 필요한 경우
+    if (dir !== 0) {
+      // 변형(variant) 있는 아이템만 재고 조정
+      const variantIds = order.items
+        .filter((it) => it.variantId)
+        .map((it) => it.variantId as string);
+
+      if (variantIds.length > 0) {
+        // 현재 재고 조회
+        const variants = await tx.variant.findMany({
+          where: { id: { in: variantIds } },
+          select: { id: true, stock: true },
+        });
+        const stockMap = new Map(variants.map((v) => [v.id, v.stock]));
+
+        // 마이너스 재고 가드
+        for (const it of order.items) {
+          if (!it.variantId) continue;
+          const curr = stockMap.get(it.variantId) ?? 0;
+          const next = curr + dir * it.qty; // dir:-1 → 감소, dir:+1 → 증가
+          if (next < 0) {
+            throw new Error(`재고 부족: 옵션(${it.variantId}) ${curr}개, 필요한 수량 ${it.qty}개`);
+          }
+          stockMap.set(it.variantId, next);
+        }
+
+        // 실제 업데이트
+        await Promise.all(
+          Array.from(stockMap.entries()).map(([id, nextStock]) =>
+            tx.variant.update({ where: { id }, data: { stock: nextStock } })
+          )
+        );
+      }
+    }
+
+    // 주문 상태 업데이트
+    await tx.order.update({
+      where: { id },
+      data: { status },
+    });
   });
 
-  revalidateProduct(productId);
-}
-
-/* 옵션 삭제 */
-export async function deleteVariant(formData: FormData) {
-  const id = String(formData.get("id") || "");
-  const productId = String(formData.get("productId") || "");
-  if (!id || !productId) throw new Error("id/productId 필요");
-
-  await prisma.variant.delete({ where: { id } });
-
-  revalidateProduct(productId);
+  revalidateAdminAndStore();
 }
