@@ -2,16 +2,16 @@
   "name": "your-brand-site",
   "version": "0.1.0",
   "private": true,
- "scripts": {
-  "dev": "next dev --turbo",
-  "build": "next build",
-  "start": "next start",
-  "lint": "next lint",
-  "postinstall": "prisma generate"
-},
-
+  "scripts": {
+    "dev": "next dev --turbo",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "postinstall": "prisma generate"
+  },
   "dependencies": {
     "@prisma/client": "6.14.0",
+    "date-fns": "^4.1.0",
     "next": "^15.4.6",
     "prisma": "6.14.0",
     "react": "^19.1.0",

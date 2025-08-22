@@ -26,6 +26,7 @@ export default async function OrderSuccessPage({
         },
         orderBy: { id: 'asc' },
       },
+      payment: { select: { id: true, status: true, amount: true } },
     },
   });
 
@@ -47,7 +48,7 @@ export default async function OrderSuccessPage({
         주문번호: <strong>{order.id}</strong>
       </p>
       <p>
-        주문자: <strong>{order.customer?.name}</strong>
+        주문자: <strong>{order.customer?.name ?? '-'}</strong>
         {order.customer?.email ? ` · ${order.customer.email}` : ''}
       </p>
 
@@ -75,9 +76,63 @@ export default async function OrderSuccessPage({
         <strong>{total.toLocaleString()}원</strong>
       </div>
 
-      <div style={{ marginTop: 8 }}>
-        <Link href="/">계속 쇼핑</Link>
+      {/* 액션 영역 */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        {/* 결제하기: 우리가 구현한 /orders/[id]/pay로 이동 */}
+        <Link
+          href={`/orders/${order.id}/pay`}
+          style={{
+            border: '1px solid #ddd',
+            borderRadius: 12,
+            padding: '8px 14px',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+          }}
+        >
+          결제하기
+        </Link>
+
+        {/* 결제 결과 바로 보기(웹훅 후 자동 리다이렉트 목적지) */}
+        <Link
+          href={`/orders/${order.id}/result`}
+          style={{
+            border: '1px solid #ddd',
+            borderRadius: 12,
+            padding: '8px 14px',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+          }}
+        >
+          결제 결과 보기
+        </Link>
+
+        {/* 주문 상세 페이지(있으면 더 자세한 정보) */}
+        <Link
+          href={`/orders/${order.id}`}
+          style={{
+            border: '1px solid #ddd',
+            borderRadius: 12,
+            padding: '8px 14px',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+          }}
+        >
+          주문 상세
+        </Link>
+
+        {/* 계속 쇼핑 */}
+        <Link href="/" style={{ marginLeft: 'auto' }}>
+          계속 쇼핑
+        </Link>
       </div>
+
+      {/* 참고: 결제 상태 힌트 */}
+      {order.payment ? (
+        <p style={{ color: '#666', fontSize: 13 }}>
+          결제상태: <strong>{order.payment.status}</strong> (결제ID: {order.payment.id})
+        </p>
+      ) : (
+        <p style={{ color: '#666', fontSize: 13 }}>
+          아직 결제가 생성되지 않았습니다. <strong>결제하기</strong> 버튼을 눌러 진행하세요.
+        </p>
+      )}
     </div>
   );
 }

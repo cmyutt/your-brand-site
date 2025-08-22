@@ -31,6 +31,9 @@ model Order {
   customer Customer?   @relation(fields: [customerId], references: [id])
   items    OrderItem[]
 
+  // 결제 1:1 (주문당 대표 결제)
+  payment  Payment?
+
   @@index([customerId])
 }
 
@@ -41,10 +44,8 @@ model OrderItem {
   variantId String?
   unitPrice Int
   qty       Int
-
-  // 스냅샷 필드(주문 시점의 정보 보존)
-  name     String?
-  subtotal Int?
+  name      String?
+  subtotal  Int?
 
   order   Order    @relation(fields: [orderId], references: [id])
   product Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -101,5 +102,33 @@ enum OrderStatus {
   PAID
   FULFILLED
   CANCELED
+  REFUNDED
+}
+
+// === 결제 ===
+model Payment {
+  id                 String        @id @default(uuid())
+  orderId            String        @unique
+  amount             Int           // 실제 청구 금액 (KRW, 정수)
+  currency           String        @default("KRW")
+  provider           String        // "mock" | "toss" | "iamport" 등
+  providerPaymentId  String?       // PG측 결제 ID
+  status             PaymentStatus @default(INIT)
+  failureCode        String?
+  failureMessage     String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  order              Order         @relation(fields: [orderId], references: [id])
+
+  @@index([provider, providerPaymentId])
+}
+
+enum PaymentStatus {
+  INIT
+  AUTHORIZED
+  PAID
+  CANCELED
+  FAILED
   REFUNDED
 }
