@@ -37,17 +37,24 @@ function revalidateAdminAndStore() {
 }
 
 /* ----------------------- server actions ----------------------- */
-// 생성
+// 생성 (slug 중복 사전 체크 + P2002 이중 방어)
 async function createProduct(formData: FormData) {
   'use server';
 
   const name = String(formData.get('name') || '').trim();
-  const slug = String(formData.get('slug') || '').trim();
+  const slugInput = String(formData.get('slug') || '').trim();
   const price = parsePrice(formData.get('price'));
   const description = String(formData.get('description') || '').trim();
   const imagesRaw = String(formData.get('images') || '').trim();
   const variantsRaw = String(formData.get('variants') || '').trim();
-  if (!name || !slug) throw new Error('name/slug 필요');
+
+  if (!name || !slugInput) throw new Error('name/slug 필요');
+
+  // 사전 중복 체크
+  const exists = await prisma.product.findUnique({ where: { slug: slugInput } });
+  if (exists) {
+    throw new Error(`slug 중복: "${slugInput}" 은(는) 이미 사용 중입니다. 다른 slug로 시도해 주세요.`);
+  }
 
   const imageArr: Prisma.ProductImageCreateWithoutProductInput[] = imagesRaw
     .split('\n')
@@ -61,22 +68,30 @@ async function createProduct(formData: FormData) {
     .filter(Boolean)
     .map((v) => ({ name: v, stock: 0, extra: 0 }));
 
-  await prisma.product.create({
-    data: {
-      name,
-      slug,
-      price,
-      description: description || null,
-      images: { create: imageArr },
-      variants: {
-        create:
-          variantArr.length > 0
-            ? variantArr
-            : [{ name: 'Default', stock: 0, extra: 0 }],
+  try {
+    await prisma.product.create({
+      data: {
+        name,
+        slug: slugInput,
+        price,
+        description: description || null,
+        images: { create: imageArr },
+        variants: {
+          create:
+            variantArr.length > 0
+              ? variantArr
+              : [{ name: 'Default', stock: 0, extra: 0 }],
+        },
+        published: true,
       },
-      published: true,
-    },
-  });
+    });
+  } catch (err: any) {
+    // 동시성으로 인한 P2002 방어
+    if (err?.code === 'P2002' && Array.isArray(err?.meta?.target) && err.meta.target.includes('slug')) {
+      throw new Error(`slug 중복: "${slugInput}" 이(가) 방금 사용되었습니다. 다른 slug로 다시 시도해 주세요.`);
+    }
+    throw new Error('상품 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+  }
 
   revalidateAdminAndStore();
 }
