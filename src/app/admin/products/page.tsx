@@ -1,23 +1,23 @@
 // src/app/admin/products/page.tsx
-import prisma from '@/lib/prisma';
-import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
-import Link from 'next/link';
-import { Prisma } from '@prisma/client';
+import prisma from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { Prisma } from "@prisma/client";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 // 관계 포함 타입
 type ProductWithRels = Prisma.ProductGetPayload<{
-  include: { images: true; variants: { orderBy: { name: 'asc' } } };
+  include: { images: true; variants: { orderBy: { name: "asc" } } };
 }>;
 
 /* ----------------------- util ----------------------- */
 function parsePrice(input: FormDataEntryValue | null) {
-  const s = String(input ?? '').replace(/[^\d]/g, '');
-  const n = parseInt(s || '0', 10);
+  const s = String(input ?? "").replace(/[^\d]/g, "");
+  const n = parseInt(s || "0", 10);
   if (!Number.isFinite(n) || n < 0 || n > 2147483647) {
-    throw new Error('price는 0~2,147,483,647');
+    throw new Error("price는 0~2,147,483,647");
   }
   return n;
 }
@@ -25,30 +25,38 @@ function parsePrice(input: FormDataEntryValue | null) {
 function buildQS(q: Record<string, string | number | undefined>) {
   const u = new URLSearchParams();
   Object.entries(q).forEach(([k, v]) => {
-    if (v !== undefined && v !== '') u.set(k, String(v));
+    if (v !== undefined && v !== "") u.set(k, String(v));
   });
   return `?${u.toString()}`;
 }
 
 function revalidateAdminAndStore() {
-  revalidatePath('/admin/products');
-  revalidatePath('/');         // 홈에 리스트가 있을 때
-  revalidatePath('/products'); // /products 페이지를 별도로 쓰는 경우 대비
+  revalidatePath("/admin/products");
+  revalidatePath("/"); // 홈에 리스트가 있을 때
+  revalidatePath("/products"); // /products 페이지를 별도로 쓰는 경우 대비
+}
+
+function isP2002Slug(e: unknown): boolean {
+  if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+    const target = (e.meta as Record<string, unknown> | undefined)?.target;
+    return Array.isArray(target) && target.includes("slug");
+  }
+  return false;
 }
 
 /* ----------------------- server actions ----------------------- */
 // 생성 (slug 중복 사전 체크 + P2002 이중 방어)
 async function createProduct(formData: FormData) {
-  'use server';
+  "use server";
 
-  const name = String(formData.get('name') || '').trim();
-  const slugInput = String(formData.get('slug') || '').trim();
-  const price = parsePrice(formData.get('price'));
-  const description = String(formData.get('description') || '').trim();
-  const imagesRaw = String(formData.get('images') || '').trim();
-  const variantsRaw = String(formData.get('variants') || '').trim();
+  const name = String(formData.get("name") || "").trim();
+  const slugInput = String(formData.get("slug") || "").trim();
+  const price = parsePrice(formData.get("price"));
+  const description = String(formData.get("description") || "").trim();
+  const imagesRaw = String(formData.get("images") || "").trim();
+  const variantsRaw = String(formData.get("variants") || "").trim();
 
-  if (!name || !slugInput) throw new Error('name/slug 필요');
+  if (!name || !slugInput) throw new Error("name/slug 필요");
 
   // 사전 중복 체크
   const exists = await prisma.product.findUnique({ where: { slug: slugInput } });
@@ -57,13 +65,13 @@ async function createProduct(formData: FormData) {
   }
 
   const imageArr: Prisma.ProductImageCreateWithoutProductInput[] = imagesRaw
-    .split('\n')
+    .split("\n")
     .map((s) => s.trim())
     .filter(Boolean)
     .map((url, i) => ({ url, sort: i }));
 
   const variantArr: Prisma.VariantCreateWithoutProductInput[] = variantsRaw
-    .split(',')
+    .split(",")
     .map((s) => s.trim())
     .filter(Boolean)
     .map((v) => ({ name: v, stock: 0, extra: 0 }));
@@ -77,20 +85,17 @@ async function createProduct(formData: FormData) {
         description: description || null,
         images: { create: imageArr },
         variants: {
-          create:
-            variantArr.length > 0
-              ? variantArr
-              : [{ name: 'Default', stock: 0, extra: 0 }],
+          create: variantArr.length > 0 ? variantArr : [{ name: "Default", stock: 0, extra: 0 }],
         },
         published: true,
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     // 동시성으로 인한 P2002 방어
-    if (err?.code === 'P2002' && Array.isArray(err?.meta?.target) && err.meta.target.includes('slug')) {
+    if (isP2002Slug(err)) {
       throw new Error(`slug 중복: "${slugInput}" 이(가) 방금 사용되었습니다. 다른 slug로 다시 시도해 주세요.`);
     }
-    throw new Error('상품 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+    throw new Error("상품 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
   }
 
   revalidateAdminAndStore();
@@ -98,36 +103,36 @@ async function createProduct(formData: FormData) {
 
 // 삭제 (CASCADE 전제)
 async function deleteProduct(formData: FormData) {
-  'use server';
-  const id = String(formData.get('id') || '');
-  if (!id) throw new Error('id 필요');
+  "use server";
+  const id = String(formData.get("id") || "");
+  if (!id) throw new Error("id 필요");
   await prisma.product.delete({ where: { id } });
   revalidateAdminAndStore();
 }
 
 // 인라인 가격 수정
 async function updatePrice(formData: FormData) {
-  'use server';
-  const id = String(formData.get('id') || '');
-  const price = parsePrice(formData.get('price'));
-  if (!id) throw new Error('id 필요');
+  "use server";
+  const id = String(formData.get("id") || "");
+  const price = parsePrice(formData.get("price"));
+  if (!id) throw new Error("id 필요");
   await prisma.product.update({ where: { id }, data: { price } });
   revalidateAdminAndStore();
 }
 
 // 첫 번째 옵션 재고 수정(예시)
 async function updateFirstVariantStock(formData: FormData) {
-  'use server';
-  const productId = String(formData.get('productId') || '');
-  const stockStr = String(formData.get('stock') || '').replace(/[^\d-]/g, '');
-  const stock = parseInt(stockStr || '0', 10);
-  if (!productId || !Number.isFinite(stock)) throw new Error('입력 확인');
+  "use server";
+  const productId = String(formData.get("productId") || "");
+  const stockStr = String(formData.get("stock") || "").replace(/[^\d-]/g, "");
+  const stock = parseInt(stockStr || "0", 10);
+  if (!productId || !Number.isFinite(stock)) throw new Error("입력 확인");
 
   const v = await prisma.variant.findFirst({
     where: { productId },
-    orderBy: { name: 'asc' },
+    orderBy: { name: "asc" },
   });
-  if (!v) throw new Error('Variant 없음');
+  if (!v) throw new Error("Variant 없음");
 
   await prisma.variant.update({ where: { id: v.id }, data: { stock } });
   revalidateAdminAndStore();
@@ -135,24 +140,24 @@ async function updateFirstVariantStock(formData: FormData) {
 
 // 공개/비공개 토글
 async function togglePublish(formData: FormData) {
-  'use server';
-  const id = String(formData.get('id') || '');
-  const next = String(formData.get('next') || '') === 'true';
-  if (!id) throw new Error('id 필요');
+  "use server";
+  const id = String(formData.get("id") || "");
+  const next = String(formData.get("next") || "") === "true";
+  if (!id) throw new Error("id 필요");
   await prisma.product.update({ where: { id }, data: { published: next } });
   revalidateAdminAndStore(); // ✅ 스토어/관리자 모두 갱신
 }
 
 // 검색 액션
 async function searchAction(formData: FormData) {
-  'use server';
-  const q = String(formData.get('q') || '');
-  const only = String(formData.get('only') || '');
-  const per = String(formData.get('per') || '');
+  "use server";
+  const q = String(formData.get("q") || "");
+  const only = String(formData.get("only") || "");
+  const per = String(formData.get("per") || "");
   const qs = new URLSearchParams();
-  if (q) qs.set('q', q);
-  if (only) qs.set('only', only);
-  if (per) qs.set('per', per);
+  if (q) qs.set("q", q);
+  if (only) qs.set("only", only);
+  if (per) qs.set("per", per);
   redirect(`/admin/products?${qs.toString()}`);
 }
 
@@ -173,9 +178,11 @@ function Pagination({
   const prev = Math.max(1, page - 1);
   const next = Math.min(pages, page + 1);
   return (
-    <nav style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+    <nav style={{ display: "flex", gap: 8, marginTop: 12 }}>
       <Link href={buildQS({ ...carry, page: prev, per })}>← Prev</Link>
-      <span style={{ opacity: 0.7 }}>Page {page} / {pages}</span>
+      <span style={{ opacity: 0.7 }}>
+        Page {page} / {pages}
+      </span>
       <Link href={buildQS({ ...carry, page: next, per })}>Next →</Link>
     </nav>
   );
@@ -183,7 +190,7 @@ function Pagination({
 
 function SearchBar() {
   return (
-    <form action={searchAction} style={{ display: 'flex', gap: 8 }}>
+    <form action={searchAction} style={{ display: "flex", gap: 8 }}>
       <input name="q" placeholder="검색어 (name/slug)" />
       <select name="only" defaultValue="">
         <option value="">전체</option>
@@ -212,32 +219,30 @@ export default async function AdminProducts({
 }) {
   const sp = await searchParams;
 
-  const q = typeof sp?.q === 'string' ? sp.q.trim() : '';
+  const q = typeof sp?.q === "string" ? sp.q.trim() : "";
 
-  const page =
-    parseInt(typeof sp?.page === 'string' ? sp.page : '1', 10) || 1;
+  const page = parseInt(typeof sp?.page === "string" ? sp.page : "1", 10) || 1;
 
-  const perRaw =
-    parseInt(typeof sp?.per === 'string' ? sp.per : '10', 10) || 10;
+  const perRaw = parseInt(typeof sp?.per === "string" ? sp.per : "10", 10) || 10;
   const per = Math.min(50, Math.max(5, perRaw));
 
   const only =
-    typeof sp?.only === 'string'
-      ? (sp.only as 'published' | 'unpublished' | '')
-      : '';
+    typeof sp?.only === "string"
+      ? (sp.only as "published" | "unpublished" | "")
+      : "";
 
   const where: Prisma.ProductWhereInput = {
     AND: [
       q
         ? {
             OR: [
-              { name: { contains: q, mode: 'insensitive' } },
-              { slug: { contains: q, mode: 'insensitive' } },
+              { name: { contains: q, mode: "insensitive" } },
+              { slug: { contains: q, mode: "insensitive" } },
             ],
           }
         : {},
-      only === 'published' ? { published: true } : {},
-      only === 'unpublished' ? { published: false } : {},
+      only === "published" ? { published: true } : {},
+      only === "unpublished" ? { published: false } : {},
     ],
   };
 
@@ -245,24 +250,24 @@ export default async function AdminProducts({
     prisma.product.count({ where }),
     prisma.product.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
-      include: { images: true, variants: { orderBy: { name: 'asc' } } },
+      orderBy: { createdAt: "desc" },
+      include: { images: true, variants: { orderBy: { name: "asc" } } },
       skip: (page - 1) * per,
       take: per,
     }) as Promise<ProductWithRels[]>,
   ]);
 
   return (
-    <div style={{ display: 'grid', gap: 24 }}>
+    <div style={{ display: "grid", gap: 24 }}>
       <SearchBar />
 
       {/* 생성 폼 */}
       <form
         action={createProduct}
         style={{
-          display: 'grid',
+          display: "grid",
           gap: 8,
-          border: '1px solid #eee',
+          border: "1px solid #eee",
           padding: 16,
           borderRadius: 12,
         }}
@@ -294,45 +299,43 @@ export default async function AdminProducts({
       <div>
         <div
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
             marginBottom: 8,
           }}
         >
-          <h2 style={{ fontSize: 18, fontWeight: 700 }}>
-            상품 목록 ({total})
-          </h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700 }}>상품 목록 ({total})</h2>
           <small style={{ opacity: 0.7 }}>
             {page}/{Math.max(1, Math.ceil(total / per))} pages · per {per}
           </small>
         </div>
 
-        <ul style={{ display: 'grid', gap: 8 }}>
+        <ul style={{ display: "grid", gap: 8 }}>
           {products.map((p) => (
             <li
               key={p.id}
               style={{
-                border: '1px solid #eee',
+                border: "1px solid #eee",
                 borderRadius: 12,
                 padding: 12,
               }}
             >
               <div
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr auto',
+                  display: "grid",
+                  gridTemplateColumns: "1fr auto",
                   gap: 12,
-                  alignItems: 'center',
+                  alignItems: "center",
                 }}
               >
                 {/* left */}
                 <div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     <strong>{p.name}</strong>
                     <span style={{ opacity: 0.7 }}>{p.slug}</span>
                     <span style={{ opacity: 0.7 }}>
-                      · {p.published ? 'Published' : 'Draft'}
+                      · {p.published ? "Published" : "Draft"}
                     </span>
                   </div>
                   <div style={{ opacity: 0.7, marginTop: 4 }}>
@@ -341,18 +344,18 @@ export default async function AdminProducts({
                         대표이미지
                       </a>
                     ) : (
-                      '이미지 없음'
-                    )}{' '}
+                      "이미지 없음"
+                    )}{" "}
                     · 옵션 {p.variants.length}개
                   </div>
                 </div>
 
                 {/* right: actions */}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <Link href={`/admin/products/${p.id}`}>Edit</Link>
 
                   {/* 인라인 가격 수정 */}
-                  <form action={updatePrice} style={{ display: 'flex', gap: 4 }}>
+                  <form action={updatePrice} style={{ display: "flex", gap: 4 }}>
                     <input type="hidden" name="id" value={p.id} />
                     <input
                       name="price"
@@ -364,7 +367,7 @@ export default async function AdminProducts({
                   </form>
 
                   {/* 첫 옵션 재고 수정 */}
-                  <form action={updateFirstVariantStock} style={{ display: 'flex', gap: 4 }}>
+                  <form action={updateFirstVariantStock} style={{ display: "flex", gap: 4 }}>
                     <input type="hidden" name="productId" value={p.id} />
                     <input
                       name="stock"
@@ -380,8 +383,8 @@ export default async function AdminProducts({
                   <form action={togglePublish}>
                     <input type="hidden" name="id" value={p.id} />
                     <input type="hidden" name="next" value={(!p.published).toString()} />
-                    <button type="submit" style={{ padding: '4px 8px' }}>
-                      {p.published ? 'Unpublish' : 'Publish'}
+                    <button type="submit" style={{ padding: "4px 8px" }}>
+                      {p.published ? "Unpublish" : "Publish"}
                     </button>
                   </form>
 
@@ -390,7 +393,7 @@ export default async function AdminProducts({
                     <input type="hidden" name="id" value={p.id} />
                     <button
                       type="submit"
-                      style={{ background: '#fee', border: '1px solid #f88', padding: '4px 8px' }}
+                      style={{ background: "#fee", border: "1px solid #f88", padding: "4px 8px" }}
                     >
                       Delete
                     </button>
