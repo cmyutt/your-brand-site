@@ -1,0 +1,239 @@
+﻿/* Highlight partial borders and animate for required inputs */
+.requiredInputWrapper {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
+  --accent-color: transparent;
+  --accent-opacity: 1;
+  --accent-thickness: 2px;
+  --accent-offset: 0px;
+  --accent-top-width: 66%;
+  --accent-bottom-width: 50%;
+}
+
+.requiredInputHighlightBorder {
+  --accent-color: #b91c1c;
+}
+
+.requiredInputTypingBorder {
+  --accent-color: #d1d5db;
+  --accent-opacity: 0.35;
+}
+
+.requiredInputErrorBorder {
+  --accent-color: #b91c1c;
+}
+
+.requiredInputSuccessBorder {
+  --accent-color: #15803d;
+}
+
+.requiredInputHighlight {
+  --accent-color: #b91c1c;
+  --accent-top-width: 66%;
+  --accent-bottom-width: 50%;
+}
+
+.requiredInputSuccess {
+  --accent-color: #15803d;
+  --accent-top-width: 66%;
+  --accent-bottom-width: 50%;
+}
+
+.requiredInputTyping {
+  --accent-opacity: 0.35;
+}
+
+.requiredInputWrapper::before,
+.requiredInputWrapper::after {
+  content: "";
+  position: absolute;
+  height: var(--accent-thickness);
+  background-color: var(--accent-color);
+  opacity: var(--accent-opacity);
+  pointer-events: none;
+  z-index: 1;
+  transition: opacity 120ms ease;
+}
+
+.requiredInputWrapper::before {
+  top: -1px;
+  left: -1px;
+  width: calc(var(--accent-top-width) + 2px);
+}
+
+.requiredInputWrapper::after {
+  bottom: -1px;
+  left: -1px;
+  width: calc(var(--accent-bottom-width) + 2px);
+}
+
+.requiredInputEdge {
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: var(--accent-thickness);
+  height: calc(100% + 2px);
+  background-color: var(--accent-color);
+  opacity: var(--accent-opacity);
+  pointer-events: none;
+  z-index: 1;
+  transition: opacity 120ms ease;
+}
+
+.requiredInputWrapper:focus-within {
+  outline: none;
+}
+
+.animateError::before {
+  animation: accent-error-top 0.6s ease;
+}
+
+.animateError::after {
+  animation: accent-error-bottom 0.6s ease;
+}
+
+.animateErrorAlt::before {
+  animation: accent-error-top-alt 0.6s ease;
+}
+
+.animateErrorAlt::after {
+  animation: accent-error-bottom-alt 0.6s ease;
+}
+
+.animateSuccess::before {
+  animation: accent-success-top 1.1s ease forwards;
+}
+
+.animateSuccess::after {
+  animation: accent-success-bottom 1.1s ease forwards;
+}
+
+.animateSuccessAlt::before {
+  animation: accent-success-top-alt 1.1s ease forwards;
+}
+
+.animateSuccessAlt::after {
+  animation: accent-success-bottom-alt 1.1s ease forwards;
+}
+
+@keyframes accent-error-top {
+  0% {
+    width: calc(var(--accent-top-width) + var(--accent-offset));
+  }
+  50% {
+    width: calc(100% + var(--accent-offset));
+  }
+  100% {
+    width: calc(var(--accent-top-width) + var(--accent-offset));
+  }
+}
+
+@keyframes accent-error-bottom {
+  0% {
+    width: calc(var(--accent-bottom-width) + var(--accent-offset));
+  }
+  50% {
+    width: calc(100% + var(--accent-offset));
+  }
+  100% {
+    width: calc(var(--accent-bottom-width) + var(--accent-offset));
+  }
+}
+
+@keyframes accent-error-top-alt {
+  0% {
+    width: calc(var(--accent-top-width) + var(--accent-offset));
+  }
+  50% {
+    width: calc(100% + var(--accent-offset));
+  }
+  100% {
+    width: calc(var(--accent-top-width) + var(--accent-offset));
+  }
+}
+
+@keyframes accent-error-bottom-alt {
+  0% {
+    width: calc(var(--accent-bottom-width) + var(--accent-offset));
+  }
+  50% {
+    width: calc(100% + var(--accent-offset));
+  }
+  100% {
+    width: calc(var(--accent-bottom-width) + var(--accent-offset));
+  }
+}
+
+@keyframes accent-success-top {
+  0% {
+    width: calc(var(--accent-top-width) + var(--accent-offset));
+  }
+  45% {
+    width: calc(var(--accent-top-width) + var(--accent-offset));
+  }
+  75% {
+    width: calc(100% + var(--accent-offset));
+  }
+  100% {
+    width: calc(50% + var(--accent-offset));
+  }
+}
+
+@keyframes accent-success-bottom {
+  0% {
+    width: calc(var(--accent-bottom-width) + var(--accent-offset));
+  }
+  45% {
+    width: calc(var(--accent-bottom-width) + var(--accent-offset));
+  }
+  75% {
+    width: calc(100% + var(--accent-offset));
+  }
+  100% {
+    width: calc(66% + var(--accent-offset));
+  }
+}
+
+@keyframes accent-success-top-alt {
+  0% {
+    width: calc(var(--accent-top-width) + var(--accent-offset));
+  }
+  45% {
+    width: calc(var(--accent-top-width) + var(--accent-offset));
+  }
+  75% {
+    width: calc(100% + var(--accent-offset));
+  }
+  100% {
+    width: calc(50% + var(--accent-offset));
+  }
+}
+
+@keyframes accent-success-bottom-alt {
+  0% {
+    width: calc(var(--accent-bottom-width) + var(--accent-offset));
+  }
+  45% {
+    width: calc(var(--accent-bottom-width) + var(--accent-offset));
+  }
+  75% {
+    width: calc(100% + var(--accent-offset));
+  }
+  100% {
+    width: calc(66% + var(--accent-offset));
+  }
+}
+
+.requiredInputWrapper[aria-readonly="true"] {
+  --accent-opacity: 0.6;
+}
+
+.requiredInputWrapper[aria-disabled="true"],
+.requiredInputWrapper.requiredInputDisabled {
+  --accent-opacity: 0;
+}
+
+

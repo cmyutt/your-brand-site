@@ -1,0 +1,17 @@
+{
+  "name": "next15-prisma-supabase",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" }
+  },
+  "postCreateCommand": "npm i && npx prisma generate",
+  "forwardPorts": [3000, 5555],
+  "containerEnv": {
+    "PRISMA_CLIENT_ENGINE_TYPE": "binary",
+    "NODE_OPTIONS": "--dns-result-order=ipv4first"
+  },
+  "remoteEnv": {
+    "NEXT_TELEMETRY_DISABLED": "1"
+  }
+}
+

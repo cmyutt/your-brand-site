@@ -1,0 +1,786 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ChangeEvent, MutableRefObject } from "react";
+
+import GlbViewer from "@/components/GlbViewer";
+
+type ManifestAdditionalModel = {
+  url: string | null;
+  offset?: Pivot | null;
+  modelOffset?: Pivot | null;
+  scale?: number | null;
+  modelScale?: number | null;
+};
+
+type ManifestResponse = {
+  backgroundUrl: string | null;
+  modelUrl: string | null;
+  pivot: Pivot | null;
+  modelOffset: Pivot | null;
+  modelScale: number | null;
+  additionalModels?: ManifestAdditionalModel[] | null;
+  additionalModelUrls?: string[] | null;
+};
+
+type Pivot = {
+  x: number;
+  y: number;
+  z: number;
+};
+
+type AdditionalModelState = {
+  id: string;
+  kind: "existing" | "new";
+  url: string | null;
+  file?: File;
+  previewUrl: string | null;
+  label: string;
+  offset: Pivot;
+  scale: number;
+};
+
+const defaultPivot: Pivot = { x: 0, y: 0, z: 0 };
+const defaultScale = 1;
+
+export default function AdminOpeningPage() {
+  const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
+  const [backgroundPreview, setBackgroundPreview] = useState<string | null>(null);
+  const [backgroundFile, setBackgroundFile] = useState<File | null>(null);
+  const [imageLayerUrl, setImageLayerUrl] = useState<string | null>(null);
+  const [imageLayerPreview, setImageLayerPreview] = useState<string | null>(null);
+  const [imageLayerFile, setImageLayerFile] = useState<File | null>(null);
+
+  const [modelUrl, setModelUrl] = useState<string | null>(null);
+  const [modelPreview, setModelPreview] = useState<string | null>(null);
+  const [modelFile, setModelFile] = useState<File | null>(null);
+  const [pivot, setPivot] = useState<Pivot>(defaultPivot);
+  const [modelOffset, setModelOffset] = useState<Pivot>(defaultPivot);
+  const [modelScale, setModelScale] = useState(defaultScale);
+
+  const [additionalModels, setAdditionalModels] = useState<AdditionalModelState[]>([]);
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const backgroundBlobRef = useRef<string | null>(null);
+  const imageLayerBlobRef = useRef<string | null>(null);
+  const modelBlobRef = useRef<string | null>(null);
+  const additionalBlobMapRef = useRef(new Map<string, string>());
+
+  const clearAdditionalPreviews = useCallback(() => {
+    additionalBlobMapRef.current.forEach((url) => {
+      URL.revokeObjectURL(url);
+    });
+    additionalBlobMapRef.current.clear();
+  }, []);
+
+  const revokeAdditionalPreview = useCallback((id: string) => {
+    const url = additionalBlobMapRef.current.get(id);
+    if (url) {
+      URL.revokeObjectURL(url);
+      additionalBlobMapRef.current.delete(id);
+    }
+  }, []);
+
+  const loadManifest = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/admin/opening", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error("Failed to fetch opening configuration");
+      }
+      const data = (await response.json()) as ManifestResponse;
+      setBackgroundUrl(data.backgroundUrl);
+      setBackgroundPreview(data.backgroundUrl);
+      setBackgroundFile(null);
+      revokeUrl(backgroundBlobRef);
+
+      setImageLayerUrl(data.imageLayerUrl ?? null);
+      setImageLayerPreview(data.imageLayerUrl ?? null);
+      setImageLayerFile(null);
+      revokeUrl(imageLayerBlobRef);
+
+      setModelUrl(data.modelUrl);
+      setModelPreview(data.modelUrl);
+      setModelFile(null);
+      setPivot(data.pivot ?? defaultPivot);
+      setModelOffset(data.modelOffset ?? defaultPivot);
+      setModelScale(typeof data.modelScale === "number" && Number.isFinite(data.modelScale) ? data.modelScale : defaultScale);
+      revokeUrl(modelBlobRef);
+
+      clearAdditionalPreviews();
+      setAdditionalModels(createAdditionalStateFromResponse(data));
+    } catch (err) {
+      console.error(err);
+      setError("Unable to load opening configuration.");
+      setBackgroundUrl(null);
+      setBackgroundPreview(null);
+      setImageLayerUrl(null);
+      setImageLayerPreview(null);
+      setImageLayerFile(null);
+      setModelUrl(null);
+      setModelPreview(null);
+      setPivot(defaultPivot);
+      setModelOffset(defaultPivot);
+      setModelScale(defaultScale);
+      clearAdditionalPreviews();
+      setAdditionalModels([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [clearAdditionalPreviews]);
+
+  useEffect(() => {
+    void loadManifest();
+    return () => {
+      revokeUrl(backgroundBlobRef);
+      revokeUrl(imageLayerBlobRef);
+      revokeUrl(modelBlobRef);
+      clearAdditionalPreviews();
+    };
+  }, [loadManifest, clearAdditionalPreviews]);
+
+  const handleBackgroundChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    revokeUrl(backgroundBlobRef);
+    setSuccess(null);
+    setError(null);
+
+    if (file) {
+      const url = URL.createObjectURL(file);
+      backgroundBlobRef.current = url;
+      setBackgroundFile(file);
+      setBackgroundPreview(url);
+    } else {
+      setBackgroundFile(null);
+      setBackgroundPreview(backgroundUrl);
+    }
+  };
+
+  const handleImageLayerChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    revokeUrl(imageLayerBlobRef);
+    setSuccess(null);
+    setError(null);
+
+    if (file) {
+      const url = URL.createObjectURL(file);
+      imageLayerBlobRef.current = url;
+      setImageLayerFile(file);
+      setImageLayerPreview(url);
+      setImageLayerUrl(null);
+    } else {
+      setImageLayerFile(null);
+      setImageLayerPreview(imageLayerUrl);
+    }
+  };
+
+  const handleModelChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    revokeUrl(modelBlobRef);
+    setSuccess(null);
+    setError(null);
+
+    if (file) {
+      const url = URL.createObjectURL(file);
+      modelBlobRef.current = url;
+      setModelFile(file);
+      setModelPreview(url);
+      setPivot(defaultPivot);
+      setModelOffset(defaultPivot);
+      setModelScale(defaultScale);
+    } else {
+      setModelFile(null);
+      setModelPreview(modelUrl);
+    }
+  };
+
+  const handleAddAdditionalModel = () => {
+    setSuccess(null);
+    setError(null);
+    const id = generateLocalId();
+    setAdditionalModels((prev) => [
+      ...prev,
+      {
+        id,
+        kind: "new",
+        url: null,
+        file: undefined,
+        previewUrl: null,
+        label: "?†ÌÉù???åÏùº ?ÜÏùå",
+        offset: { ...defaultPivot },
+        scale: defaultScale,
+      },
+    ]);
+  };
+
+  const handleAdditionalFileChange = (id: string, event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setSuccess(null);
+    setError(null);
+
+    const previousUrl = additionalBlobMapRef.current.get(id) ?? null;
+
+    if (file) {
+      if (previousUrl) {
+        URL.revokeObjectURL(previousUrl);
+      }
+      const previewUrl = URL.createObjectURL(file);
+      additionalBlobMapRef.current.set(id, previewUrl);
+
+      setAdditionalModels((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                file,
+                previewUrl,
+                label: file.name,
+              }
+            : item,
+        ),
+      );
+    } else {
+      if (previousUrl) {
+        URL.revokeObjectURL(previousUrl);
+        additionalBlobMapRef.current.delete(id);
+      }
+
+      setAdditionalModels((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                file: undefined,
+                previewUrl: item.url,
+                label: item.url ? deriveFileLabel(item.url) : "?†ÌÉù???åÏùº ?ÜÏùå",
+              }
+            : item,
+        ),
+      );
+    }
+
+    event.target.value = "";
+  };
+
+  const handleAdditionalOffsetChange = (id: string, axis: keyof Pivot, value: string) => {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return;
+    }
+    const numericValue = Number(trimmed);
+    setAdditionalModels((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              offset: {
+                ...item.offset,
+                [axis]: Number.isFinite(numericValue) ? numericValue : item.offset[axis],
+              },
+            }
+          : item,
+      ),
+    );
+  };
+
+  const handleAdditionalScaleChange = (id: string, value: string) => {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return;
+    }
+    const numericValue = Number(trimmed);
+    setAdditionalModels((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              scale: Number.isFinite(numericValue) && numericValue > 0 ? numericValue : item.scale,
+            }
+          : item,
+      ),
+    );
+  };
+
+  const handleRemoveAdditionalModel = (id: string) => {
+    setSuccess(null);
+    setError(null);
+    revokeAdditionalPreview(id);
+    setAdditionalModels((prev) => prev.filter((entry) => entry.id !== id));
+  };
+
+  const handleOffsetChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const axis = event.target.name as keyof Pivot;
+    const numericValue = Number(event.target.value);
+    setModelOffset((prev) => ({
+      ...prev,
+      [axis]: Number.isFinite(numericValue) ? numericValue : prev[axis],
+    }));
+  };
+
+  const handleClearImageLayer = () => {
+    revokeUrl(imageLayerBlobRef);
+    setImageLayerFile(null);
+    setImageLayerPreview(null);
+    setImageLayerUrl(null);
+    setSuccess(null);
+    setError(null);
+  };
+
+  const handleClearBackground = () => {
+    revokeUrl(backgroundBlobRef);
+    setBackgroundFile(null);
+    setBackgroundPreview(null);
+    setBackgroundUrl(null);
+    setSuccess(null);
+    setError(null);
+  };
+
+  const handleClearModel = () => {
+    revokeUrl(modelBlobRef);
+    setModelFile(null);
+    setModelPreview(null);
+    setModelUrl(null);
+    setPivot(defaultPivot);
+    setModelOffset(defaultPivot);
+    setSuccess(null);
+    setError(null);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSuccess(null);
+    setError(null);
+    try {
+      const formData = new FormData();
+      if (backgroundFile) {
+        formData.append("backgroundFile", backgroundFile);
+      }
+      formData.append("backgroundUrl", backgroundFile ? "" : backgroundUrl ?? "");
+
+      if (imageLayerFile) {
+        formData.append("imageLayerFile", imageLayerFile);
+      }
+      formData.append("imageLayerUrl", imageLayerFile ? "" : imageLayerUrl ?? "");
+
+      if (modelFile) {
+        formData.append("modelFile", modelFile);
+      }
+      formData.append("modelUrl", modelFile ? "" : modelUrl ?? "");
+
+      const additionalPayload = additionalModels.reduce<Array<Record<string, unknown>>>(
+        (acc, item) => {
+          const basePayload = {
+            offset: item.offset,
+            scale: item.scale,
+          };
+
+          if (item.file) {
+            const fieldName = `additionalModelFile_${item.id}`;
+            formData.append(fieldName, item.file);
+            acc.push({ ...basePayload, kind: "new", fileField: fieldName });
+          } else if (item.url) {
+            acc.push({ ...basePayload, kind: "existing", url: item.url });
+          }
+
+          return acc;
+        },
+        [],
+      );
+
+      formData.append("additionalModelPayload", JSON.stringify(additionalPayload));
+
+      formData.append("pivotX", String(pivot.x));
+      formData.append("pivotY", String(pivot.y));
+      formData.append("pivotZ", String(pivot.z));
+      formData.append("offsetX", String(modelOffset.x));
+      formData.append("offsetY", String(modelOffset.y));
+      formData.append("offsetZ", String(modelOffset.z));
+      formData.append("modelScale", String(modelScale));
+
+      const response = await fetch("/api/admin/opening", {
+        method: "POST",
+        body: formData,
+      });
+      if (!response.ok) {
+        throw new Error("Failed to save opening assets");
+      }
+      const data = (await response.json()) as ManifestResponse;
+      setBackgroundUrl(data.backgroundUrl);
+      setBackgroundPreview(data.backgroundUrl);
+      setBackgroundFile(null);
+      revokeUrl(backgroundBlobRef);
+
+      setImageLayerUrl(data.imageLayerUrl);
+      setImageLayerPreview(data.imageLayerUrl);
+      setImageLayerFile(null);
+      revokeUrl(imageLayerBlobRef);
+
+      setModelUrl(data.modelUrl);
+      setModelPreview(data.modelUrl);
+      setModelFile(null);
+      setPivot(data.pivot ?? defaultPivot);
+      setModelOffset(data.modelOffset ?? defaultPivot);
+      setModelScale(typeof data.modelScale === "number" && Number.isFinite(data.modelScale) ? data.modelScale : defaultScale);
+      revokeUrl(modelBlobRef);
+
+      clearAdditionalPreviews();
+      setAdditionalModels(createAdditionalStateFromResponse(data));
+
+      setSuccess("Opening assets saved.");
+    } catch (err) {
+      console.error(err);
+      setError("Failed to save opening assets. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const hasAdditionalModels = additionalModels.length > 0;
+
+  return (
+    <div className="space-y-8 py-8">
+      <header>
+        <h1 className="text-2xl font-semibold text-gray-900">Opening Assets</h1>
+        <p className="mt-2 text-sm text-gray-600">
+          Upload a background image and GLB model that will appear on the opening screen.
+        </p>
+      </header>
+
+      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-gray-900">Background Image</h2>
+        <p className="mt-1 text-sm text-gray-500">JPEG, PNG or WEBP formats (up to 4K) are recommended.</p>
+        <div className="mt-4 space-y-4">
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={handleBackgroundChange}
+            disabled={loading || saving}
+            className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-md file:border-0 file:bg-gray-900 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-gray-800"
+          />
+          {backgroundPreview ? (
+            <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50 shadow-inner">
+              <img src={backgroundPreview} alt="Background preview" className="h-[28rem] w-full object-cover" />
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400">No background preview available.</p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleClearBackground}
+              disabled={loading || saving || (!backgroundUrl && !backgroundFile)}
+              className="inline-flex items-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:border-gray-400 hover:text-gray-900 disabled:cursor-not-allowed disabled:text-gray-400"
+            >
+              Remove Background
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-gray-900">GLB Model</h2>
+        <p className="mt-1 text-sm text-gray-500">Upload a .glb file; the model will render in the center of the opening scene.</p>
+        <div className="mt-4 space-y-4">
+          <input
+            type="file"
+            accept=".glb"
+            onChange={handleModelChange}
+            disabled={loading || saving}
+            className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-md file:border-0 file:bg-gray-900 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-gray-800"
+          />
+          {modelPreview ? (
+            <div className="space-y-3">
+              <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <GlbViewer
+                  url={modelPreview}
+                  pivot={pivot}
+                  modelOffset={modelOffset}
+                  modelScale={modelScale}
+                  className="w-full max-w-4xl aspect-[16/9]"
+                  showPivotIndicator
+                  showGuide
+                  guideSize={{ width: 90, height: 60 }}
+                />
+              </div>
+              <div className="flex flex-wrap gap-3">
+                {(["x", "y", "z"] as const).map((axis) => (
+                  <label key={`offset-${axis}`} className="flex flex-col text-sm text-gray-700">
+                    Model offset {axis.toUpperCase()}
+                    <input
+                      type="number"
+                      name={axis}
+                      value={modelOffset[axis]}
+                      onChange={handleOffsetChange}
+                      step="0.1"
+                      className="mt-1 w-24 rounded border border-gray-300 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-gray-900/20"
+                    />
+                  </label>
+                ))}
+                <label className="flex flex-col text-sm text-gray-700">
+                  Model scale
+                  <input
+                    type="number"
+                    min="0.1"
+                    step="0.1"
+                    value={modelScale}
+                    onChange={(event) =>
+                      setModelScale(Number.isFinite(Number(event.target.value)) ? Number(event.target.value) : defaultScale)
+                    }
+                    className="mt-1 w-24 rounded border border-gray-300 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-gray-900/20"
+                  />
+                </label>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400">Upload a GLB file to see the preview.</p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleClearModel}
+              disabled={loading || saving || (!modelUrl && !modelFile)}
+              className="inline-flex items-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:border-gray-400 hover:text-gray-900 disabled:cursor-not-allowed disabled:text-gray-400"
+            >
+              Remove Model
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6 space-y-6">
+          <button
+            type="button"
+            onClick={handleAddAdditionalModel}
+            disabled={loading || saving}
+            className="inline-flex items-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition hover:border-gray-400 hover:text-gray-900 disabled:cursor-not-allowed disabled:text-gray-400"
+          >
+            Add GLB Model
+          </button>
+
+          {hasAdditionalModels ? (
+            additionalModels.map((item, index) => {
+              const viewerUrl = item.previewUrl ?? item.url;
+              return (
+                <div key={item.id} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="text-base font-semibold text-gray-900">Additional GLB Model {index + 1}</h3>
+                      <p className="truncate text-sm text-gray-500">{item.label}</p>
+                      {item.kind === "new" && item.file ? (
+                        <p className="text-xs text-emerald-600">Not yet saved</p>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAdditionalModel(item.id)}
+                      disabled={saving}
+                      className="inline-flex items-center rounded-lg border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 transition hover:border-gray-400 hover:text-gray-900 disabled:cursor-not-allowed disabled:text-gray-400"
+                    >
+                      Remove Model
+                    </button>
+                  </div>
+                  <div className="mt-4 space-y-4">
+                    <input
+                      type="file"
+                      accept=".glb"
+                      onChange={(event) => handleAdditionalFileChange(item.id, event)}
+                      disabled={loading || saving}
+                      className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-md file:border-0 file:bg-gray-900 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-gray-800"
+                    />
+                    {viewerUrl ? (
+                      <div className="space-y-3">
+                        <div className="overflow-hidden rounded-xl border border-gray-200 bg-gray-50 p-4">
+                          <GlbViewer
+                            url={viewerUrl}
+                            pivot={pivot}
+                            modelOffset={item.offset}
+                            modelScale={item.scale}
+                            className="w-full max-w-4xl aspect-[16/9]"
+                            showPivotIndicator
+                            showGuide
+                            guideSize={{ width: 90, height: 60 }}
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          {(
+                            ["x", "y", "z"] as const
+                          ).map((axis) => (
+                            <label
+                              key={`additional-offset-${item.id}-${axis}`}
+                              className="flex flex-col text-sm text-gray-700"
+                            >
+                              Model offset {axis.toUpperCase()}
+                              <input
+                                type="number"
+                                name={axis}
+                                value={item.offset[axis]}
+                                onChange={(event) => handleAdditionalOffsetChange(item.id, axis, event.target.value)}
+                                step="0.1"
+                                className="mt-1 w-24 rounded border border-gray-300 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-gray-900/20"
+                              />
+                            </label>
+                          ))}
+                          <label className="flex flex-col text-sm text-gray-700">
+                            Model scale
+                            <input
+                              type="number"
+                              min="0.1"
+                              step="0.1"
+                              value={item.scale}
+                              onChange={(event) => handleAdditionalScaleChange(item.id, event.target.value)}
+                              className="mt-1 w-24 rounded border border-gray-300 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-gray-900/20"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-400">Upload a GLB file to see the preview.</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <p className="text-sm text-gray-400">No additional GLB models added.</p>
+          )}
+        </div>
+      </section>
+
+      <div className="flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={loading || saving}
+          className="inline-flex items-center rounded-lg bg-gray-900 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void loadManifest()}
+          disabled={loading || saving}
+          className="inline-flex items-center rounded-lg border border-gray-300 px-6 py-2 text-sm font-medium text-gray-700 transition hover:border-gray-400 hover:text-gray-900 disabled:cursor-not-allowed disabled:text-gray-400"
+        >
+          Reload from Server
+        </button>
+      </div>
+
+      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {success ? <p className="text-sm text-emerald-600">{success}</p> : null}
+    </div>
+  );
+
+}
+
+function revokeUrl(ref: MutableRefObject<string | null>) {
+  if (ref.current) {
+    URL.revokeObjectURL(ref.current);
+    ref.current = null;
+  }
+}
+
+function generateLocalId() {
+  return `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function deriveFileLabel(url: string | null) {
+  if (!url) {
+    return "unnamed.glb";
+  }
+  try {
+    const trimmed = url.trim();
+    if (trimmed.length === 0) {
+      return "unnamed.glb";
+    }
+    const segments = trimmed.split(/[\\/]/);
+    return segments[segments.length - 1] || trimmed;
+  } catch {
+    return url;
+  }
+}
+
+function createAdditionalStateFromResponse(data: ManifestResponse): AdditionalModelState[] {
+  const models = Array.isArray(data.additionalModels)
+    ? data.additionalModels
+        .map((entry, index) => {
+          const url = typeof entry?.url === "string" ? entry.url.trim() : "";
+          if (!url) {
+            return null;
+          }
+          const offsetSource = entry?.offset ?? entry?.modelOffset;
+          const scaleSource = entry?.scale ?? entry?.modelScale;
+          return {
+            id: `existing-${index}`,
+            kind: "existing" as const,
+            url,
+            file: undefined,
+            previewUrl: url,
+            label: deriveFileLabel(url),
+            offset: sanitizePivotFromResponse(offsetSource),
+            scale: sanitizeScaleFromResponse(scaleSource),
+          } satisfies AdditionalModelState | null;
+        })
+        .filter((entry): entry is AdditionalModelState => Boolean(entry))
+    : null;
+
+  if (models && models.length > 0) {
+    return models.map((entry) => ({ ...entry, offset: { ...entry.offset } }));
+  }
+
+  const fallbackUrls = Array.isArray(data.additionalModelUrls) ? data.additionalModelUrls : [];
+  return fallbackUrls
+    .map((value, index) => {
+      const url = typeof value === "string" ? value.trim() : "";
+      if (!url) {
+        return null;
+      }
+      return {
+        id: `existing-${index}`,
+        kind: "existing" as const,
+        url,
+        file: undefined,
+        previewUrl: url,
+        label: deriveFileLabel(url),
+        offset: { ...defaultPivot },
+        scale: defaultScale,
+      } satisfies AdditionalModelState | null;
+    })
+    .filter((entry): entry is AdditionalModelState => Boolean(entry));
+}
+
+function sanitizePivotFromResponse(value: unknown): Pivot {
+  if (!value || typeof value !== "object") {
+    return { ...defaultPivot };
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    x: coerceNumber(record.x, defaultPivot.x),
+    y: coerceNumber(record.y, defaultPivot.y),
+    z: coerceNumber(record.z, defaultPivot.z),
+  };
+}
+
+function sanitizeScaleFromResponse(value: unknown): number {
+  const parsed = coerceNumber(value, defaultScale);
+  return parsed > 0 ? parsed : defaultScale;
+}
+
+function coerceNumber(value: unknown, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.length > 0) {
+      const parsed = Number(trimmed);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return fallback;
+}

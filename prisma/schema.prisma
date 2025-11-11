@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+  // ??reset ?놁씠 migrate媛 留됲옄 ???먯＜ ?꾩슂???ㅼ젙
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+enum TokenType {
+  EMAIL_VERIFY
+  PASSWORD_RESET
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  orders    Order[]
+}
+
+model Order {
+  id           String      @id @default(uuid())
+  customerId   String?
+  status       OrderStatus @default(PENDING)
+  totalAmount  Int
+  receiverName String
+  phone        String
+  addressLine1 String
+  addressLine2 String?
+  postalCode   String
+  createdAt    DateTime    @default(now())
+
+  customer Customer?   @relation(fields: [customerId], references: [id])
+  items    OrderItem[]
+
+  payment  Payment?
+  events   OrderEvent[]
+
+  @@index([customerId])
+  // ?뵻 湲덉븸/?앹꽦???꾪꽣&?뺣젹???좎슜??蹂듯빀 ?몃뜳??  @@index([totalAmount, createdAt])
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  productId String
+  variantId String?
+  unitPrice Int
+  qty       Int
+  name      String?
+  subtotal  Int?
+
+  order   Order    @relation(fields: [orderId], references: [id])
+  product Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant Variant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([variantId])
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  price       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  published   Boolean  @default(true)
+
+  images     ProductImage[]
+  variants   Variant[]
+  orderItems OrderItem[]
+}
+
+model ProductImage {
+  id        String  @id @default(uuid())
+  url       String
+  alt       String?
+  sort      Int     @default(0)
+  productId String
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@unique([productId, sort])
+}
+
+model Variant {
+  id        String @id @default(uuid())
+  name      String
+  stock     Int    @default(0)
+  extra     Int    @default(0)
+  productId String
+
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@index([productId])
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FULFILLED
+  CANCELED
+  REFUNDED
+}
+
+model Payment {
+  id                 String        @id @default(uuid())
+  orderId            String        @unique
+  amount             Int
+  currency           String        @default("KRW")
+  provider           String
+  providerPaymentId  String?
+  status             PaymentStatus @default(INIT)
+  failureCode        String?
+  failureMessage     String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  order              Order         @relation(fields: [orderId], references: [id])
+
+  @@index([provider, providerPaymentId])
+}
+
+enum PaymentStatus {
+  INIT
+  AUTHORIZED
+  PAID
+  CANCELED
+  FAILED
+  REFUNDED
+}
+
+model OrderEvent {
+  id        String   @id @default(uuid())
+  orderId   String
+  type      String
+  from      String?
+  to        String?
+  note      String?
+  actor     String?
+  // ???ш퀬 蹂??delta(JSONB). ?? {"variantId": {"before": 10, "after": 7}}
+  diff      Json?
+  createdAt DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
+model AdminLog {
+  id         String   @id @default(uuid())
+  targetType String   // ?? "order"
+  targetId   String   // ?? 二쇰Ц ID
+  action     String   // ?? "ORDER_DELETED"
+  actor      String?
+  note       String?
+  snapshot   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+
+// CODPATCH: token table for email verify & password reset
+model Token {
+  id        String    @id @default(cuid())
+  userId    String
+  type      TokenType
+  token     String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([type, token])
+}
+
+// CODPATCH: add User auth model (for customer/admin authentication)
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         String   @default("USER")
+  name         String?
+  emailVerifiedAt DateTime?
+  lastLoginAt  DateTime?
+  // Extended profile fields (optional)
+  phoneCountry String?
+  phone        String?
+  country      String?
+  birthdate    DateTime?
+  marketingConsent Boolean @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // relation back to Token
+  tokens       Token[]
+}
+
+model SignupRequest {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+

@@ -1,0 +1,263 @@
+"use server";
+// CODPATCH: orders actions ??use redirector
+import { redirectOk } from "@/lib/redirector";
+import { statusChangeMessage, deletedMessage } from "@/lib/flashMessage";
+
+import type { OrderStatus } from "@prisma/client";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import prisma from "@/lib/prisma";
+import { assertAllowedTransition } from "@/lib/orderDomain";
+import { getAdminActor } from "@/lib/actor";
+import { notifyOrderEvent, notifyAdmin } from "@/lib/notify";
+import { bus } from "@/lib/bus";
+// CODPATCH: orders actions ??centralized logging helpers (note only outside tx)
+import { recordNote } from "@/lib/orderEvents";
+import { calcStockDelta } from "@/lib/stockDelta";
+
+/** ê³µí†µ ë¬´íš¨??*/
+function revalidateAdminAndStore(orderId?: string) {
+  revalidatePath("/admin/orders");
+  if (orderId) revalidatePath(`/admin/orders/${orderId}`);
+  revalidatePath("/");
+  revalidatePath("/orders");
+}
+
+/** ?¬ê³  ì¦ê° ë°©í–¥
+ * - ?Œë¹„ ?íƒœ: PAID, FULFILLED
+ * - ?Œë¹„ ?„ë‹Œ ?íƒœ: PENDING, CANCELED, REFUNDED
+ * - ?Œë¹„?”ì†Œë¹?(PAID?”FULFILLED)?€ ë³€???†ìŒ
+ */
+function stockDeltaDirection(oldS: OrderStatus, newS: OrderStatus): -1 | 0 | 1 {
+  const consume = new Set<OrderStatus>(["PAID", "FULFILLED"] as OrderStatus[]);
+  const fromConsume = consume.has(oldS);
+  const toConsume = consume.has(newS);
+  if (!fromConsume && toConsume) return -1; // ì°¨ê°
+  if (fromConsume && !toConsume) return 1;  // ë³µì›
+  return 0;                                  // ë³€???†ìŒ
+}
+
+/** ?íƒœ ?„í™˜(ì¤‘ì•™) ???„ì´ ì°¨ë‹¨ ?†ìŒ, ?¬ê³ ë§??•í™•??ë°˜ì˜ */
+export async function setOrderStatus(id: string, to: OrderStatus, note?: string | null) {
+  if (!id) throw new Error("id ?„ìš”");
+  if (!Object.values(Object.assign({}, {PAID:"PAID",PENDING:"PENDING",FULFILLED:"FULFILLED",CANCELED:"CANCELED",REFUNDED:"REFUNDED"})).includes(to)) {
+    throw new Error("?˜ëª»???íƒœ");
+  }
+
+  // ?„ì¬ ?íƒœ + ?¼ì¸?„ì´??
+  const order = await prisma.order.findUnique({
+    where: { id },
+    include: { items: { select: { variantId: true, qty: true, unitPrice: true, name: true } } },
+  });
+  if (!order) throw new Error("ì£¼ë¬¸??ì¡´ì¬?˜ì? ?ŠìŠµ?ˆë‹¤.");
+
+  // ?™ì¼ ?„ì´??ì¡°ìš©??ì¢…ë£Œ(ê·¸ë˜???¤ì‹œê°?ê°±ì‹ ?€ ?œë‹¤)
+  // ?„ë©”??ê°€?? ?ˆìš© ?„ì´ë§??µê³¼
+  assertAllowedTransition(order.status as OrderStatus, to);
+
+  if (order.status === to) {
+    revalidateAdminAndStore(id);
+    bus.publish("orders:update", { id });
+    return;
+  }
+
+  const dir = stockDeltaDirection(order.status as OrderStatus, to);
+  const actor = (await getAdminActor()) ?? "admin";
+
+  await prisma.$transaction(async (tx) => {
+    // 1) ?™ê????? statusê°€ ?¬ì „??old???Œë§Œ êµì²´
+    const updated = await tx.order.updateMany({
+      where: { id, status: order.status },
+      data: { status: to },
+    });
+    if (updated.count !== 1) {
+      throw new Error("?íƒœê°€ ?´ë? ë³€ê²½ë˜?ˆìŠµ?ˆë‹¤. ?ˆë¡œê³ ì¹¨ ???¤ì‹œ ?œë„?˜ì„¸??");
+    }
+
+    // 2) ?¬ê³  ë°˜ì˜
+    if (dir !== 0 && order.items.length > 0) {
+      const variantQty = new Map<string, number>();
+      for (const it of order.items) {
+        if (!it.variantId) continue; // ?µì…˜ ?†ëŠ” ?í’ˆ?€ ?¬ê³ ê´€ë¦??œì™¸
+        variantQty.set(it.variantId, (variantQty.get(it.variantId) ?? 0) + it.qty);
+      }
+
+      for (const [vid, qty] of variantQty) {
+        if (dir < 0) {
+          // ì°¨ê°: ?¬ê³  ì¶©ë¶„ ì¡°ê±´ë¶€ ?ì??ì°¨ê°
+          const ok = await tx.variant.updateMany({
+            where: { id: vid, stock: { gte: qty } },
+            data: { stock: { decrement: qty } },
+          });
+          if (ok.count !== 1) throw new Error("?¬ê³  ë¶€ì¡? ? íƒ???µì…˜???¬ê³ ê°€ ì¶©ë¶„?˜ì? ?ŠìŠµ?ˆë‹¤.");
+        } else {
+          // ë³µì›: ê·¸ë?ë¡?ì¦ê?
+          await tx.variant.update({
+            where: { id: vid },
+            data: { stock: { increment: qty } },
+          });
+        }
+      }
+    }
+
+    // 3) ?´ë²¤??ë¡œê·¸ (tx ?´ë¼?´ì–¸???¬ìš©; delta ì£¼ì„ ?¬í•¨)
+    const delta = calcStockDelta(
+      order.status as OrderStatus,
+      to,
+      order.items.map((it) => ({ qty: it.qty }))
+    );
+    const parts: string[] = [`${order.status} ??${to}`];
+    if (delta !== 0) parts.push(`?¬ê³  ${delta > 0 ? `+${delta}` : delta}`);
+    if (note) parts.push(note);
+    const finalNote = parts.join(" Â· ");
+
+    await tx.orderEvent.create({
+      data: {
+        orderId: id,
+        type: "STATUS_CHANGED",
+        from: order.status,
+        to,
+        note: finalNote,
+        actor,
+      },
+    });
+
+    // 4) ê´€ë¦¬ì ë¡œê·¸(? íƒ)
+    try {
+      await tx.adminLog.create({
+        data: {
+          targetType: "order",
+          targetId: id,
+          action: "ORDER_STATUS_CHANGED",
+          actor,
+          note: note ?? null,
+          snapshot: { from: order.status, to },
+        },
+      });
+    } catch {
+      // adminLog ?†ëŠ” ?„ë¡œ?íŠ¸?ì„œ???™ì‘?˜ë„ë¡?no-op
+    }
+  }, { timeout: 15000 });
+
+  // ?Œë¦¼?€ ?¸ëœ??…˜ ë°?
+  void notifyOrderEvent({
+    orderId: id,
+    type: "STATUS_CHANGED",
+    from: order.status,
+    to,
+    note: note ?? undefined,
+    actor,
+  }).catch(() => {});
+
+  revalidateAdminAndStore(id);
+  bus.publish("orders:update", { id }); // ??SSE ë¸Œë¡œ?œìº?¤íŠ¸
+}
+
+/** ëª©ë¡?ì„œ ë°”ë¡œ ?¸ì¶œ */
+export async function setOrderStatusDirect(id: string, to: OrderStatus) {
+  await setOrderStatus(id, to);
+}
+
+/** ???¡ì…˜ */
+export async function transitionOrderStatus(formData: FormData) {
+  const id = String(formData.get("orderId") || "");
+  const to = String(formData.get("to") || "") as OrderStatus;
+  const note = (formData.get("note") as string) || null;
+  if (!id || !to) return;
+  await setOrderStatus(id, to, note);
+  redirectOk("/admin/orders", statusChangeMessage(to));
+}
+
+/** ë©”ëª¨ ì¶”ê? */
+export async function addOrderNote(formData: FormData) {
+  const id = String(formData.get("orderId") || "");
+  const note = String(formData.get("note") || "");
+  if (!id || !note.trim()) return;
+
+  const actor = (await getAdminActor()) ?? "admin";
+  await recordNote({ orderId: id, note, actor });
+
+  void notifyOrderEvent({ orderId: id, type: "NOTE", note, actor }).catch(() => {});
+  revalidateAdminAndStore(id);
+  bus.publish("orders:update", { id }); // ??ë©”ëª¨??ê°±ì‹ 
+}
+
+/** ?? œ(?¼ì—???¸ì¶œ) */
+export async function deleteOrder(formData: FormData): Promise<void> {
+  const id = String(formData.get("orderId") || "");
+  if (!id) throw new Error("orderId ?„ìš”");
+  try {
+    await deleteOrderById(id);
+  } catch (e) {
+    console.error("[deleteOrder] failed:", e);
+  } finally {
+    revalidateAdminAndStore(id);
+    bus.publish("orders:update", { id }); // ???? œ ê°±ì‹ 
+  }
+}
+
+/** ?¨ê±´ ?? œ(?ì„¸?ì„œ ì§ì ‘ ?¸ì¶œ) */
+export async function deleteOrderDirect(id: string): Promise<void> {
+  if (!id) throw new Error("orderId ?„ìš”");
+  try {
+    await deleteOrderById(id);
+  } catch (e) {
+    console.error("[deleteOrderDirect] failed:", e);
+  } finally {
+    revalidateAdminAndStore(id);
+    bus.publish("orders:update", { id }); // ???? œ ê°±ì‹ 
+    redirectOk("/admin/orders", "?? œ?˜ì—ˆ?µë‹ˆ??);
+  }
+}
+
+/** ?¤ì œ ?? œ ë¡œì§ (ê³µìœ )
+ *  - PAID/FULFILLED ?íƒœ?¼ë©´ ?µì…˜ë³??¬ê³  ë³µì›
+ *  - ê´€???´ë²¤??ê²°ì œ ?? œ ??ì£¼ë¬¸ ?? œ
+ *  - ê´€ë¦¬ì ?Œë¦¼ ë°œì†¡
+ */
+async function deleteOrderById(id: string) {
+  const actor = (await getAdminActor()) ?? "admin";
+
+  const existing = await prisma.order.findUnique({
+    where: { id },
+    include: { items: { select: { variantId: true, qty: true, unitPrice: true, name: true } } },
+  });
+  if (!existing) return;
+
+  const shouldRestock =
+    existing.status === "PAID" || existing.status === "FULFILLED";
+
+  await prisma.$transaction(async (tx) => {
+    if (shouldRestock) {
+      for (const it of existing.items) {
+        if (!it.variantId) continue;
+        await tx.variant.update({
+          where: { id: it.variantId },
+          data: { stock: { increment: it.qty } },
+        });
+      }
+    }
+
+    try { await tx.orderEvent.deleteMany({ where: { orderId: id } }); } catch {}
+    try { await tx.payment.deleteMany({ where: { orderId: id } }); } catch {}
+
+    await tx.orderItem.deleteMany({ where: { orderId: id } });
+    await tx.order.delete({ where: { id } });
+  }, { timeout: 15000 });
+
+  const short = id.slice(0, 8);
+  const total =
+    (existing as any).totalAmount ??
+    existing.items.reduce((a, it) => a + it.unitPrice * it.qty, 0);
+  const fmt = new Intl.NumberFormat("ko-KR");
+  const msg =
+`?—‘ï¸?ì£¼ë¬¸ ?? œ
+??ì£¼ë¬¸ë²ˆí˜¸: #${short}
+???íƒœ: ${existing.status}
+???„ì´?? ${existing.items.length}ê°?
+??ì´ì•¡: ${fmt.format(total)}??
+??ì²˜ë¦¬?? ${actor}`;
+  void notifyAdmin(msg).catch(() => {});
+}
+
+

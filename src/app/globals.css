@@ -1,0 +1,162 @@
+/* Tailwind base */
+@import "tailwindcss";
+
+/* Basic document reset */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  height: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #ffffff;
+}
+
+.background-layer {
+  position: relative;
+  width: 100%;
+  min-height: var(--acrylic-content-min-height, 100svh);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.acrylic-shell {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: var(--acrylic-shell-padding, 0);
+  z-index: 1;
+}
+
+.acrylic-frame {
+  position: relative;
+  width: var(--acrylic-max-width, min(72vw, 960px));
+  min-height: var(--acrylic-min-height, min(78vh, 720px));
+  height: var(--acrylic-min-height, auto);
+  aspect-ratio: var(--acrylic-aspect-ratio, auto);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.acrylic-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.acrylic-image-layer {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  transition: opacity 0.35s ease, background-position 0.35s ease, background-size 0.35s ease, filter 0.35s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.acrylic-panel {
+  position: relative;
+  width: var(--acrylic-panel-width, 250px);
+  max-width: var(--acrylic-panel-width, 250px);
+  height: var(--acrylic-panel-height, 720px);
+  max-height: var(--acrylic-panel-height, 720px);
+  border-radius: 0;
+  background: transparent;
+  border: 2px solid #ffffff;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+  box-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.22),
+    inset 0 0 14px rgba(255, 255, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  background-clip: padding-box;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.acrylic-panel::before {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  left: 16%;
+  width: 68%;
+  height: 18px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.35) 0%,
+    rgba(0, 0, 0, 0.18) 38%,
+    rgba(0, 0, 0, 0.05) 72%,
+    transparent 100%
+  );
+  filter: blur(10px);
+  opacity: 0.55;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.acrylic-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 90% at 50% -10%, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0.4) 35%, rgba(255, 255, 255, 0.1) 70%, transparent 90%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.18) 32%, rgba(255, 255, 255, 0.05) 64%, transparent 92%);
+  opacity: 0.9;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.acrylic-panel__texture {
+  position: absolute;
+  inset: 0;
+  background: url("/textures/acrylic_highres_texture.png") center/cover no-repeat;
+  opacity: var(--acrylic-texture-opacity, 0.18);
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.acrylic-panel__brightness,
+.acrylic-panel__shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.acrylic-panel__brightness {
+  background: rgba(255, 255, 255, 1);
+  mix-blend-mode: screen;
+  opacity: 0;
+}
+
+.acrylic-panel__shade {
+  background: rgba(0, 0, 0, 1);
+  mix-blend-mode: multiply;
+  opacity: 0;
+}
+
+.acrylic-content {
+  position: relative;
+  z-index: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: var(--acrylic-content-min-height, 100svh);
+  padding: var(--acrylic-content-padding, 0);
+  box-sizing: border-box;
+}

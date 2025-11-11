@@ -1,0 +1,30 @@
+{
+  "updatedAt": "2025-11-06T15:01:23.758Z",
+  "backgroundUrl": "/opening/background-opening-background.png",
+  "imageLayerUrl": "/opening/image-opening-image-layer.png",
+  "imageLayerPosition": {
+    "x": 50,
+    "y": 50
+  },
+  "imageLayerScale": 53,
+  "acrylicBlur": 3,
+  "acrylicOpacity": 0,
+  "acrylicTextureOpacity": 0.63,
+  "acrylicBrightness": -0.05,
+  "acrylicTopGap": 36,
+  "acrylicAnchorY": 1151,
+  "modelUrl": null,
+  "pivot": {
+    "x": 0,
+    "y": 0,
+    "z": 0
+  },
+  "modelOffset": {
+    "x": 0,
+    "y": 0,
+    "z": 0
+  },
+  "modelScale": 4.6,
+  "additionalModels": [],
+  "additionalModelUrls": []
+}

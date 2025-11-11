@@ -1,0 +1,169 @@
+﻿// Clean dashboard page (UTF-8 safe)
+import prisma from "@/lib/prisma";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import SalesChart from "./SalesChart";
+import DashboardFilters from "./DashboardFilters";
+import LiveRefresher from "./LiveRefresher";
+import DashboardMetrics from "./DashboardMetrics";
+import { topProductsBetween } from "@/lib/metrics";
+import { tOrderStatus } from "@/lib/labels";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+type SP = Record<string, string | string[] | undefined>;
+type PageProps = { searchParams: Promise<SP> };
+
+function ymd(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+
+function parseRange(sp: SP): { start: Date; end: Date; fromStr: string; toStr: string } {
+  const maybe = (v: any) => (typeof v === "string" && v.trim() !== "" ? v.trim() : "");
+  const qFrom = maybe(sp?.from);
+  const qTo = maybe(sp?.to);
+  const qRange = maybe(sp?.range);
+
+  // 1) explicit from/to wins
+  if (qFrom || qTo) {
+    const end = qTo ? new Date(`${qTo}T23:59:59.999Z`) : new Date();
+    const start = qFrom ? new Date(`${qFrom}T00:00:00.000Z`) : new Date(end.getTime() - 6 * 24 * 60 * 60 * 1000);
+    return { start, end, fromStr: ymd(start), toStr: ymd(end) };
+  }
+
+  // 2) range key (today|yesterday|7d|30d)
+  const today = new Date();
+  const endBase = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 23, 59, 59, 999));
+  let start: Date;
+  let end: Date = endBase;
+  switch (qRange) {
+    case "today":
+      start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 0, 0, 0, 0));
+      break;
+    case "yesterday": {
+      const y = new Date(endBase.getTime() - 24 * 60 * 60 * 1000);
+      start = new Date(Date.UTC(y.getUTCFullYear(), y.getUTCMonth(), y.getUTCDate(), 0, 0, 0, 0));
+      end = new Date(Date.UTC(y.getUTCFullYear(), y.getUTCMonth(), y.getUTCDate(), 23, 59, 59, 999));
+      break;
+    }
+    case "30d":
+      start = new Date(endBase.getTime() - 29 * 24 * 60 * 60 * 1000);
+      break;
+    case "7d":
+    default:
+      start = new Date(endBase.getTime() - 6 * 24 * 60 * 60 * 1000);
+      break;
+  }
+  return { start, end, fromStr: ymd(start), toStr: ymd(end) };
+}
+
+export default async function AdminDashboardPage(props: PageProps) {
+  const jar = await cookies();
+  if (jar.get("admin")?.value !== "1") redirect("/admin/login?next=/admin/dashboard");
+
+  const sp = await props.searchParams;
+  const { start, end, fromStr, toStr } = parseRange(sp);
+
+  const orders = await prisma.order.findMany({
+    where: { createdAt: { gte: start, lte: end } },
+    select: { createdAt: true, totalAmount: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const days: Record<string, { amount: number; count: number }> = {};
+  {
+    let cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
+    const last = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
+    while (cur <= last) {
+      days[ymd(cur)] = { amount: 0, count: 0 };
+      cur = new Date(cur.getTime() + 24 * 60 * 60 * 1000);
+    }
+  }
+  for (const o of orders) {
+    const key = ymd(o.createdAt);
+    const bucket = days[key];
+    if (bucket) {
+      bucket.amount += Number((o as any).totalAmount ?? 0);
+      bucket.count += 1;
+    }
+  }
+
+  const data = Object.entries(days).map(([date, v]) => ({ date, amount: v.amount, count: v.count }));
+
+  // status counts within range
+  const grouped = await prisma.order.groupBy({
+    by: ["status"],
+    where: { createdAt: { gte: start, lte: end } },
+    _count: { _all: true },
+  });
+  const statusCount: Record<string, number> = { PENDING: 0, PAID: 0, FULFILLED: 0, CANCELED: 0, REFUNDED: 0 };
+  for (const g of grouped) statusCount[g.status as string] = g._count._all;
+
+  // top products (qty)
+  const top = await topProductsBetween(start, end, 5);
+
+  return (
+    <div style={{ maxWidth: 1100, margin: "24px auto", display: "grid", gap: 16 }}>
+      <LiveRefresher topic="orders:update" refreshDebounceMs={400} />
+      <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
+        <DashboardFilters />
+      </div>
+      <DashboardMetrics from={fromStr} to={toStr} />
+      <section style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
+        <h2 style={{ margin: 0, marginBottom: 8, fontSize: 16 }}>일별 매출/주문수</h2>
+        <div style={{ height: 320 }}>
+          <SalesChart data={data} height={320} />
+        </div>
+      </section>
+
+      <section style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
+        <h2 style={{ margin: 0, marginBottom: 8, fontSize: 16 }}>상태별 건수</h2>
+        <ul style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+          gap: 8,
+          listStyle: "none",
+          margin: 0,
+          padding: 0,
+        }}>
+          {["PENDING","PAID","FULFILLED","CANCELED","REFUNDED"].map((s) => (
+            <li key={s} style={{ border: "1px dashed #eee", borderRadius: 10, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>{tOrderStatus(s as any)}</span>
+              <strong>{(statusCount[s] ?? 0).toLocaleString()}</strong>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
+        <h2 style={{ margin: 0, marginBottom: 8, fontSize: 16 }}>인기 상품(수량)</h2>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: "6px 4px" }}>상품</th>
+              <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: "6px 4px" }}>수량</th>
+            </tr>
+          </thead>
+          <tbody>
+            {top.map((p, i) => (
+              <tr key={`${p.name}-${i}`}>
+                <td style={{ padding: "6px 4px" }}>{p.name}</td>
+                <td style={{ padding: "6px 4px", textAlign: "right" }}>{p.qty.toLocaleString()}</td>
+              </tr>
+            ))}
+            {top.length === 0 && (
+              <tr>
+                <td colSpan={2} style={{ padding: "10px 4px", textAlign: "center", color: "#6B7280" }}>
+                  데이터가 없습니다.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  );
+}
