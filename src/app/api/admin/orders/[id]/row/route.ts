@@ -2,9 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-type RouteContext = { params: { id: string } };
-
-export async function GET(_: Request, context: RouteContext) {
+export async function GET(_: Request, context: { params: { id: string } }) {
   const id = context.params?.id;
   const row = await (prisma as any).order.findUnique?.({
     where: { id },
