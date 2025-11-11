@@ -2,8 +2,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET(_: Request, { params }: { params: { id: string } }) {
-  const id = params.id;
+type RouteContext = { params: { id: string } };
+
+export async function GET(_: Request, context: RouteContext) {
+  const id = context.params?.id;
   const row = await (prisma as any).order.findUnique?.({
     where: { id },
     select: { id: true, status: true },
@@ -11,4 +13,3 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
   if (!row) return NextResponse.json({ ok: false }, { status: 404 });
   return NextResponse.json({ ok: true, row });
 }
-

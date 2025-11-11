@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 // CODPATCH: customer auth actions ??model autodetect + safe fallbacks
 import { prisma } from "@/lib/prisma";
@@ -55,6 +55,19 @@ async function createUser(pModel: any, email: string, hash: string) {
     }
   }
   throw lastErr ?? new Error("Failed to create user.");
+}
+
+async function updateUserPassword(pModel: any, id: string, hash: string): Promise<boolean> {
+  const payloads = [{ passwordHash: hash }, { password: hash }];
+  for (const data of payloads) {
+    try {
+      await pModel.update({ where: { id }, data });
+      return true;
+    } catch {
+      // try next payload shape
+    }
+  }
+  return false;
 }
 
 // --- actions -------------------------------------------------------
@@ -189,7 +202,7 @@ export async function startAuth(_: any, fd: FormData): Promise<any> {
   try {
     const email = String(fd.get("email") ?? "").trim().toLowerCase();
     if (!email) {
-      return { kind: "fail", message: "이메일을 입력해 주세요." };
+      return { kind: "fail", message: "�̸����� �Է��� �ּ���." };
     }
 
     const U = getUserModel(prisma as any);
@@ -207,23 +220,23 @@ export async function sendSignupCode(_: any, fd: FormData): Promise<Result> {
   try {
     const email = String(fd.get("email") ?? "").trim().toLowerCase();
     if (!email) {
-      return { kind: "fail", message: "이메일을 입력해 주세요." };
+      return { kind: "fail", message: "�̸����� �Է��� �ּ���." };
     }
 
     const U = getUserModel(prisma as any);
     const user = await findByEmail(U, email);
     if (user && (user as any).emailVerifiedAt) {
-      return { kind: "fail", message: "이미 인증이 완료된 이메일이에요." };
+      return { kind: "fail", message: "�̹� ������ �Ϸ�� �̸����̿���." };
     }
 
     const rl = await hit(`signup-code:${email}`, 5, 60 * 60);
     if (!rl.allowed) {
-      return { kind: "fail", message: "요청이 너무 많아요. 잠시 후 다시 시도해 주세요." };
+      return { kind: "fail", message: "��û�� �ʹ� ���ƿ�. ��� �� �ٽ� �õ��� �ּ���." };
     }
 
     const request = await (prisma as any).signupRequest.findUnique({ where: { email } });
     if (request && request.createdAt && request.createdAt.getTime() > Date.now() - 60 * 1000) {
-      return { kind: "fail", message: "코드를 다시 받으려면 잠시만 기다려 주세요." };
+      return { kind: "fail", message: "�ڵ带 �ٽ� �������� ��ø� ��ٷ� �ּ���." };
     }
 
     const code = String(Math.floor(100000 + Math.random() * 900000));
@@ -241,9 +254,9 @@ export async function sendSignupCode(_: any, fd: FormData): Promise<Result> {
       "[Your Brand] Verification code",
       `<p>Your code: <b>${code}</b></p><p>Please enter it within 10 minutes.</p>`
     );
-    return { kind: "ok", message: "인증 코드를 이메일로 전송했어요." };
+    return { kind: "ok", message: "���� �ڵ带 �̸��Ϸ� �����߾��." };
   } catch (e: any) {
-    return { kind: "fail", message: e?.message ?? "인증 코드를 보내지 못했어요. 잠시 후 다시 시도해 주세요." };
+    return { kind: "fail", message: e?.message ?? "���� �ڵ带 ������ ���߾��. ��� �� �ٽ� �õ��� �ּ���." };
   }
 }
 
@@ -252,25 +265,25 @@ export async function verifySignupCode(_: any, fd: FormData): Promise<Result> {
     const email = String(fd.get("email") ?? "").trim().toLowerCase();
     const code = String(fd.get("code") ?? "").trim();
     if (!email || !code) {
-      return { kind: "fail", message: "인증 코드를 입력해 주세요." };
+      return { kind: "fail", message: "���� �ڵ带 �Է��� �ּ���." };
     }
 
     const request = await (prisma as any).signupRequest.findUnique({ where: { email } });
     if (!request) {
-      return { kind: "fail", message: "인증 요청을 찾을 수 없어요." };
+      return { kind: "fail", message: "���� ��û�� ã�� �� �����." };
     }
     if (new Date(request.expiresAt).getTime() < Date.now()) {
-      return { kind: "fail", message: "인증 코드의 유효 시간이 지났어요." };
+      return { kind: "fail", message: "���� �ڵ��� ��ȿ �ð��� �������." };
     }
 
     const hashed = hashSignupCode(code);
     if (hashed !== request.code) {
-      return { kind: "fail", message: "인증 코드가 올바르지 않아요." };
+      return { kind: "fail", message: "���� �ڵ尡 �ùٸ��� �ʾƿ�." };
     }
 
     return { kind: "ok", message: "Verification code confirmed." };
   } catch (e: any) {
-    return { kind: "fail", message: e?.message ?? "인증 코드를 확인하지 못했어요. 잠시 후 다시 시도해 주세요." };
+    return { kind: "fail", message: e?.message ?? "���� �ڵ带 Ȯ������ ���߾��. ��� �� �ٽ� �õ��� �ּ���." };
   }
 }
 export async function signUpWithCode(_: any, fd: FormData): Promise<Result> {
@@ -286,28 +299,28 @@ export async function signUpWithCode(_: any, fd: FormData): Promise<Result> {
     const agree = String(fd.get("agree") ?? "") === "on";
 
     if (!email || !code || !password) {
-      return { kind: "fail", message: "필수 항목을 모두 입력해 주세요." };
+      return { kind: "fail", message: "�ʼ� �׸��� ��� �Է��� �ּ���." };
     }
 
     if (password.length < 8) {
-      return { kind: "fail", message: "비밀번호는 최소 8자 이상이어야 해요." };
+      return { kind: "fail", message: "��й�ȣ�� �ּ� 8�� �̻��̾�� �ؿ�." };
     }
 
     const request = await (prisma as any).signupRequest.findUnique({ where: { email } });
     if (!request) {
-      return { kind: "fail", message: "인증 요청을 찾을 수 없어요." };
+      return { kind: "fail", message: "���� ��û�� ã�� �� �����." };
     }
     if (new Date(request.expiresAt).getTime() < Date.now()) {
-      return { kind: "fail", message: "인증 코드의 유효 시간이 지났어요." };
+      return { kind: "fail", message: "���� �ڵ��� ��ȿ �ð��� �������." };
     }
     if (hashSignupCode(code) !== request.code) {
-      return { kind: "fail", message: "인증 코드가 올바르지 않아요." };
+      return { kind: "fail", message: "���� �ڵ尡 �ùٸ��� �ʾƿ�." };
     }
 
     const U = getUserModel(prisma as any);
     let user = await findByEmail(U, email);
     if (user && (user as any).emailVerifiedAt) {
-      return { kind: "fail", message: "이미 가입된 이메일이에요." };
+      return { kind: "fail", message: "�̹� ���Ե� �̸����̿���." };
     }
 
     const hash = await bcrypt.hash(password, 10);
@@ -350,7 +363,7 @@ export async function signUpWithCode(_: any, fd: FormData): Promise<Result> {
       }
     }
     if (!updated) {
-      throw new Error("계정 정보를 업데이트하지 못했어요.");
+      throw new Error("���� ������ ������Ʈ���� ���߾��.");
     }
 
     try { await (prisma as any).signupRequest.delete({ where: { email } }); } catch {}
@@ -364,12 +377,114 @@ export async function signUpWithCode(_: any, fd: FormData): Promise<Result> {
     } catch {}
 
     await setSession({ id, email });
-    return { kind: "ok", message: "가입이 완료됐어요." };
+    return { kind: "ok", message: "������ �Ϸ�ƾ��." };
   } catch (e: any) {
-    return { kind: "fail", message: e?.message ?? "가입을 완료하지 못했어요. 잠시 후 다시 시도해 주세요." };
+    return { kind: "fail", message: e?.message ?? "������ �Ϸ����� ���߾��. ��� �� �ٽ� �õ��� �ּ���." };
+  }}
+
+export async function requestPasswordReset(_: any, fd: FormData): Promise<Result> {
+  try {
+    const okOrigin = await ensureSameOrigin();
+    if (!okOrigin) {
+      return { kind: "fail", message: "Invalid request origin." };
+    }
+
+    const email = String(fd.get("email") ?? "").trim().toLowerCase();
+    if (!email) {
+      return { kind: "fail", message: "Please enter your email." };
+    }
+
+    const rate = await hit(`pwreset:${email}`, 5, 15 * 60);
+    if (!rate.allowed) {
+      return { kind: "fail", message: "Too many requests. Try again later." };
+    }
+
+    const U = getUserModel(prisma as any);
+    const user = U ? await findByEmail(U, email) : null;
+    if (!user) {
+      return { kind: "ok", message: "If the account exists, a reset link was sent." };
+    }
+
+    const tokenModel = (prisma as any).token;
+    if (!tokenModel?.create) {
+      return { kind: "fail", message: "Reset token storage is unavailable." };
+    }
+
+    const tokenValue = makeToken();
+    const userId = String((user as any).id);
+
+    await tokenModel.deleteMany({ where: { userId, type: "PASSWORD_RESET" } });
+    await tokenModel.create({
+      data: {
+        userId,
+        type: "PASSWORD_RESET",
+        token: tokenValue,
+        expiresAt: new Date(Date.now() + RESET_HOURS * 3600 * 1000),
+      },
+    });
+
+    const link = buildLink("/reset-password", { token: tokenValue });
+    await sendMail(
+      email,
+      "[Your Brand] Reset your password",
+      `<p>Use the link below to reset your password.</p><p><a href="${link}">${link}</a></p>`
+    );
+
+    return { kind: "ok", message: "If the account exists, a reset link was sent." };
+  } catch (e: any) {
+    return { kind: "fail", message: e?.message ?? "Unable to process your request." };
   }
 }
 
+export async function resetPassword(_: any, fd: FormData): Promise<Result> {
+  try {
+    const okOrigin = await ensureSameOrigin();
+    if (!okOrigin) {
+      return { kind: "fail", message: "Invalid request origin." };
+    }
+
+    const token = String(fd.get("token") ?? "").trim();
+    const password = String(fd.get("password") ?? "");
+    if (!token || !password) {
+      return { kind: "fail", message: "Missing token or password." };
+    }
+    if (password.length < 8) {
+      return { kind: "fail", message: "Password must be at least 8 characters." };
+    }
+
+    const tokenModel = (prisma as any).token;
+    const record = tokenModel?.findUnique ? await tokenModel.findUnique({ where: { token } }) : null;
+    if (!record || record.type !== "PASSWORD_RESET") {
+      return { kind: "fail", message: "Invalid reset token." };
+    }
+    if (record.expiresAt && new Date(record.expiresAt).getTime() < Date.now()) {
+      return { kind: "fail", message: "Reset link has expired." };
+    }
+
+    const U = getUserModel(prisma as any);
+    if (!U?.update) {
+      return { kind: "fail", message: "User model not available." };
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+    const updated = await updateUserPassword(U, String(record.userId), hash);
+    if (!updated) {
+      return { kind: "fail", message: "Failed to update password." };
+    }
+
+    try {
+      await tokenModel.deleteMany({ where: { userId: record.userId, type: "PASSWORD_RESET" } });
+    } catch {}
+
+    try {
+      await bus.publish("customer:password", { id: String(record.userId) });
+    } catch {}
+
+    return { kind: "ok", message: "Password has been updated." };
+  } catch (e: any) {
+    return { kind: "fail", message: e?.message ?? "Unable to reset password." };
+  }
+}
 export async function signOut(): Promise<Result> {
   try {
     const okOrigin = await ensureSameOrigin();
