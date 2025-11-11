@@ -22,6 +22,11 @@ export default async function DashboardMetrics({ from, to }: Props) {
     topProductsBetween(start, end, 5),
   ]);
 
+  const topSummary =
+    top.length > 0
+      ? top.map((t) => `${t.name} x${t.qty}`).join(" · ")
+      : "No data";
+
   return (
     <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
       <MetricCard
@@ -34,19 +39,7 @@ export default async function DashboardMetrics({ from, to }: Props) {
         value={`${lead} days`}
         hint="Average days from order to fulfillment"
       />
-      <MetricCard
-        title="Top Products"
-        value={
-          <ul className="text-sm">
-            {top.map((t) => (
-              <li key={t.id} className="flex items-center justify-between gap-2">
-                <span className="truncate">{t.name}</span>
-                <span className="text-gray-500">x{t.qty}</span>
-              </li>
-            ))}
-          </ul>
-        }
-      />
+      <MetricCard title="Top Products" value={topSummary} hint="Top sellers in the selected range" />
     </section>
   );
 }
