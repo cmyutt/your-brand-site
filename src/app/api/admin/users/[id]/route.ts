@@ -11,8 +11,6 @@ type OrderSummary = {
   itemCount: number;
 };
 
-type RouteContext = { params: { id: string } };
-
 const ORDER_SUMMARY_SELECT = {
   id: true,
   status: true,
@@ -24,8 +22,8 @@ const ORDER_SUMMARY_SELECT = {
 
 type OrderSummaryRow = Prisma.OrderGetPayload<{ select: typeof ORDER_SUMMARY_SELECT }>;
 
-export async function GET(_: Request, context: RouteContext) {
-  const id = context.params?.id;
+export async function GET(_: Request, context: any) {
+  const id = context?.params?.id;
   if (!id) {
     return NextResponse.json({ error: "Missing user id" }, { status: 400 });
   }
