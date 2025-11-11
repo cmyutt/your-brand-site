@@ -2,8 +2,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function GET(_: Request, context: { params: { id: string } }) {
-  const id = context.params?.id;
+export async function GET(_: Request, context: any) {
+  const id = context?.params?.id;
   const row = await (prisma as any).order.findUnique?.({
     where: { id },
     select: { id: true, status: true },
