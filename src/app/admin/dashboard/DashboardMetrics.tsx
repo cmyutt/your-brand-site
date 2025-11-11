@@ -24,15 +24,24 @@ export default async function DashboardMetrics({ from, to }: Props) {
 
   return (
     <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-      <MetricCard title="AOV(í‰ê·  ì£¼ë¬¸ê¸ˆì•¡)" value={`${aov.toLocaleString("ko-KR")}ì›`} hint="ê¸°ê°„ í•„í„° ê¸°ì¤€" />
-      <MetricCard title="í‰ê·  ë¦¬ë“œíƒ€ìž„" value={`${lead}ì¼`} hint="ì£¼ë¬¸â†’ë°°ì†¡ì™„ë£Œ" />
       <MetricCard
-        title="Top ìƒí’ˆ"
+        title="AOV(Æò±Õ ÁÖ¹®±Ý¾×)"
+        value={`${aov.toLocaleString("ko-KR")}¿ø`}
+        hint="¼±ÅÃ ±â°£ µ¿¾È ÁÖ¹® 1°Ç´ç Æò±Õ °áÁ¦ ±Ý¾×"
+      />
+      <MetricCard
+        title="Æò±Õ ¸®µåÅ¸ÀÓ"
+        value={`${lead}ÀÏ`}
+        hint="ÁÖ¹®ºÎÅÍ ¹è¼Û ¿Ï·á±îÁö Æò±Õ ¼Ò¿ä ÀÏ¼ö"
+      />
+      <MetricCard
+        title="Top »óÇ°"
         value={
           <ul className="text-sm">
             {top.map((t) => (
-              <li key={t.id}>
-                {t.name} <span className="text-gray-500">Ã—{t.qty}</span>
+              <li key={t.id} className="flex items-center justify-between gap-2">
+                <span className="truncate">{t.name}</span>
+                <span className="text-gray-500">¡¿{t.qty}</span>
               </li>
             ))}
           </ul>
