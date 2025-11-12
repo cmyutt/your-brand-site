@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { buildAdminLogQuery, buildPageParam } from "@/lib/adminLogQuery";
 import LogsLiveClient from "./LogsLiveClient";
 import { cookies } from "next/headers";
@@ -42,7 +43,14 @@ export default async function Page({ searchParams }: { searchParams: Promise<Sp>
   const sp = await searchParams;
   const { where, orderBy, skip, take } = buildAdminLogQuery(sp);
   // 중복(감사용) 로그 제외: targetType=audit 이거나 action=ORDER_STATUS_CHANGE 인 항목 숨김
-  const extraWhere = { NOT: { OR: [{ targetType: "audit" }, { action: "ORDER_STATUS_CHANGE" }] } } as const;
+  const extraWhere: Prisma.AdminLogWhereInput = {
+    NOT: {
+      OR: [
+        { targetType: "audit" },
+        { action: "ORDER_STATUS_CHANGE" },
+      ],
+    },
+  };
 
   const [logs, total] = await Promise.all([
     prisma.adminLog.findMany({
