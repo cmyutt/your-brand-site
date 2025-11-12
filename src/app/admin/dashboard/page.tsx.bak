@@ -1,4 +1,4 @@
-ï»¿// Clean dashboard page (UTF-8 safe)
+// Clean dashboard page (UTF-8 safe)
 import prisma from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -113,14 +113,14 @@ export default async function AdminDashboardPage(props: PageProps) {
       </div>
       <DashboardMetrics from={fromStr} to={toStr} />
       <section style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
-        <h2 style={{ margin: 0, marginBottom: 8, fontSize: 16 }}>ì¼ë³„ ë§¤ì¶œ/ì£¼ë¬¸ìˆ˜</h2>
+        <h2 style={{ margin: 0, marginBottom: 8, fontSize: 16 }}>ÀÏº° ¸ÅÃâ/ÁÖ¹®¼ö</h2>
         <div style={{ height: 320 }}>
           <SalesChart data={data} height={320} />
         </div>
       </section>
 
       <section style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
-        <h2 style={{ margin: 0, marginBottom: 8, fontSize: 16 }}>ìƒíƒœë³„ ê±´ìˆ˜</h2>
+        <h2 style={{ margin: 0, marginBottom: 8, fontSize: 16 }}>»óÅÂº° °Ç¼ö</h2>
         <ul style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
@@ -139,40 +139,32 @@ export default async function AdminDashboardPage(props: PageProps) {
       </section>
 
       <section style={{ border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
-        <h2 style={{ margin: 0, marginBottom: 8, fontSize: 16 }}>ì¸ê¸° ìƒí’ˆ(ìˆ˜ëŸ‰)</h2>
-        {top.length > 0 ? (
-          <ul
-            style={{
-              listStyle: "none",
-              margin: 0,
-              padding: 0,
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-            }}
-          >
+        <h2 style={{ margin: 0, marginBottom: 8, fontSize: 16 }}>ÀÎ±â »óÇ°(¼ö·®)</h2>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left", borderBottom: "1px solid #eee", padding: "6px 4px" }}>»óÇ°</th>
+              <th style={{ textAlign: "right", borderBottom: "1px solid #eee", padding: "6px 4px" }}>¼ö·®</th>
+            </tr>
+          </thead>
+          <tbody>
             {top.map((p, i) => (
-              <li
-                key={`${p.name}-${i}`}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  borderBottom: "1px solid #f3f4f6",
-                  paddingBottom: 4,
-                }}
-              >
-                <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {p.name}
-                </span>
-                <strong style={{ color: "#4b5563" }}>x{p.qty.toLocaleString()}</strong>
-              </li>
+              <tr key={`${p.name}-${i}`}>
+                <td style={{ padding: "6px 4px" }}>{p.name}</td>
+                <td style={{ padding: "6px 4px", textAlign: "right" }}>{p.qty.toLocaleString()}</td>
+              </tr>
             ))}
-          </ul>
-        ) : (
-          <div style={{ padding: "12px 4px", color: "#6B7280", textAlign: "center" }}>ë°ì´í„°ê°€ ì—†ìŠµë‹ˆë‹¤.</div>
-        )}
+            {top.length === 0 && (
+              <tr>
+                <td colSpan={2} style={{ padding: "10px 4px", textAlign: "center", color: "#6B7280" }}>
+                  µ¥ÀÌÅÍ°¡ ¾ø½À´Ï´Ù.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </section>
     </div>
   );
 }
+
