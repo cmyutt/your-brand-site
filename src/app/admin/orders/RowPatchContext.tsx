@@ -36,7 +36,7 @@ function createStore(): Store {
 const Ctx = createContext<Store | null>(null);
 
 export function RowPatchProvider({ children }: { children: React.ReactNode }) {
-  const storeRef = useRef<Store>();
+  const storeRef = useRef<Store | null>(null);
   if (!storeRef.current) storeRef.current = createStore();
   return <Ctx.Provider value={storeRef.current}>{children}</Ctx.Provider>;
 }
@@ -57,4 +57,3 @@ export function useRowPatch() {
   );
   return api;
 }
-
