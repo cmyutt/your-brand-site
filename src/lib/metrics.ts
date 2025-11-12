@@ -1,6 +1,12 @@
 // CODPATCH: metrics — AOV / Top Products / Lead time (idempotent)
 import prisma from "@/lib/prisma";
 
+type TopProduct = {
+  id: string;
+  name: string;
+  qty: number;
+};
+
 export async function aovBetween(from?: Date, to?: Date) {
   const where: any = {};
   if (from || to) where.createdAt = {};
@@ -12,7 +18,7 @@ export async function aovBetween(from?: Date, to?: Date) {
   return Math.round((sum / rows.length) * 100) / 100;
 }
 
-export async function topProductsBetween(from?: Date, to?: Date, limit = 5) {
+export async function topProductsBetween(from?: Date, to?: Date, limit = 5): Promise<TopProduct[]> {
   const where: any = {};
   if (from || to) where.createdAt = {};
   if (from) where.createdAt.gte = from;
@@ -37,7 +43,7 @@ export async function topProductsBetween(from?: Date, to?: Date, limit = 5) {
     select: { id: true, name: true },
   });
   const nameById = new Map(products.map((p: any) => [String(p.id), p.name]));
-  return sorted.map(([id, qty]) => ({ id, name: nameById.get(id) ?? id, qty }));
+  return sorted.map(([id, qty]) => ({ id, name: nameById.get(id) ?? id, qty } satisfies TopProduct));
 }
 
 export async function leadTimeBetween(from?: Date, to?: Date) {

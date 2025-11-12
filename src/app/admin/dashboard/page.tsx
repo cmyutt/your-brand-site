@@ -104,6 +104,10 @@ export default async function AdminDashboardPage(props: PageProps) {
 
   // top products (qty)
   const top = await topProductsBetween(start, end, 5);
+  const topSummary =
+    top.length > 0
+      ? top.map((p, i) => `${i + 1}. ${p.name} ×${p.qty.toLocaleString()}`).join("  •  ")
+      : "데이터가 없습니다.";
 
   return (
     <div style={{ maxWidth: 1100, margin: "24px auto", display: "grid", gap: 16 }}>
