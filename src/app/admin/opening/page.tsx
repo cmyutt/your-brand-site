@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 
 
@@ -116,6 +116,8 @@ type AdditionalModelState = {
 };
 
 
+
+const isDefined = <T,>(value: T | null | undefined): value is T => value != null;
 
 const defaultPivot: Pivot = { x: 0, y: 0, z: 0 };
 
@@ -2037,7 +2039,7 @@ function createAdditionalStateFromResponse(data: ManifestResponse): AdditionalMo
 
         })
 
-        .filter((entry): entry is AdditionalModelState => Boolean(entry))
+        .filter(isDefined)
 
     : null;
 
@@ -2087,7 +2089,7 @@ function createAdditionalStateFromResponse(data: ManifestResponse): AdditionalMo
 
     })
 
-    .filter((entry): entry is AdditionalModelState => Boolean(entry));
+    .filter(isDefined);
 
 }
 
@@ -2408,3 +2410,5 @@ function coerceNumber(value: unknown, fallback: number): number {
   return fallback;
 
 }
+
+
