@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-// CODPATCH: orders layout — providers import
+﻿import type { ReactNode } from "react";
+// CODPATCH: orders layout ??providers import
 import OrdersClientProviders from "./OrdersClientProviders";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -13,11 +13,10 @@ export default async function OrdersLayout({ children }: { children: ReactNode }
   if (!authed) {
     redirect("/admin/login?next=/admin/orders");
   }
-  return <>
-    {/* CODPATCH: orders layout — row patch providers */}
-    {/* @ts-expect-error Client Providers inside Server layout */}
-    <OrdersClientProviders>
-      {children}
-    </OrdersClientProviders>
-  </>;
+  return (
+    <>
+      {/* CODPATCH: orders layout ??row patch providers */}
+      <OrdersClientProviders>{children}</OrdersClientProviders>
+    </>
+  );
 }

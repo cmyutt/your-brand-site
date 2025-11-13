@@ -84,7 +84,6 @@ export default async function AdminUserDetailPage({ params }: { params: PagePara
         </Link>
       </div>
 
-      {/* @ts-expect-error Client component */}
       <UserDetail userId={id} initialUser={initialUser} />
     </div>
   );

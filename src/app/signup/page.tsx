@@ -13,11 +13,10 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import TopToast from "@/components/TopToast";
 import styles from "./requiredInput.module.css";
-import type {
-  sendSignupCode as SendSignupCodeFn,
-  signUpWithCode as SignUpWithCodeFn,
-  verifySignupCode as VerifySignupCodeFn,
-} from "@/app/(shop)/auth/actions";
+type SendSignupCodeFn = typeof import("@/app/(shop)/auth/actions").sendSignupCode;
+type SignUpWithCodeFn = typeof import("@/app/(shop)/auth/actions").signUpWithCode;
+type VerifySignupCodeFn = typeof import("@/app/(shop)/auth/actions").verifySignupCode;
+
 
 type ActionResult = Awaited<ReturnType<SendSignupCodeFn>>;
 type AccentTone = "idle" | "typing" | "error" | "success";
@@ -107,8 +106,8 @@ export default function SignUpPage() {
   const [showPolicyPopup, setShowPolicyPopup] = useState(false);
   const privacyConsentRef = useRef<HTMLInputElement | null>(null);
 
-  const [sendResult, sendAction, sendPending] = useActionState<ActionResult | null>(sendCodeHandler, null);
-  const [signupResult, signupAction, signupPending] = useActionState<ActionResult | null>(completeSignupHandler, null);
+  const [sendResult, sendAction, sendPending] = useActionState<ActionResult | null, FormData>(sendCodeHandler, null);
+  const [signupResult, signupAction, signupPending] = useActionState<ActionResult | null, FormData>(completeSignupHandler, null);
   const [isResending, startResendTransition] = useTransition();
   const [isVerifyingCode, startVerifyTransition] = useTransition();
 
@@ -651,8 +650,9 @@ export default function SignUpPage() {
                 if (target.closest("[data-policy-link]")) return;
                 event.preventDefault();
                 event.stopPropagation();
-                if (!privacyConsentRef.current) return;
-                privacyConsentRef.current.checked = true;
+                const checkbox = privacyConsentRef.current;
+                if (!checkbox) return;
+                checkbox.checked = true;
               }}
             >
               <input
@@ -673,8 +673,9 @@ export default function SignUpPage() {
                     onClick={(event) => {
                       event.preventDefault();
                       event.stopPropagation();
-                      if (!privacyConsentRef.current?.checked) {
-                        privacyConsentRef.current.checked = true;
+                      const checkbox = privacyConsentRef.current;
+                      if (checkbox && !checkbox.checked) {
+                        checkbox.checked = true;
                       }
                       setShowPolicyPopup(true);
                     }}

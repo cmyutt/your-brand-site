@@ -217,7 +217,7 @@ export default function GlbViewer({
           <Environment preset="studio" />
 
           <OrbitControls
-            ref={controlsRef}
+            ref={controlsRef as unknown as any}
             enableDamping
             dampingFactor={0.12}
             enablePan={false}

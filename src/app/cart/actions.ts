@@ -7,8 +7,8 @@ import { headers } from "next/headers";
 import { getSession } from "@/lib/auth/session";
 import prisma from "@/lib/prisma";
 
-function resolveNextPath(fallback: string) {
-  const referer = headers().get("referer");
+async function resolveNextPath(fallback: string) {
+  const referer = (await headers()).get("referer");
   if (!referer) return fallback;
   try {
     const url = new URL(referer);
@@ -21,7 +21,7 @@ function resolveNextPath(fallback: string) {
 async function assertAuthenticated(fallback: string) {
   const session = await getSession();
   if (session) return session;
-  const next = resolveNextPath(fallback);
+  const next = await resolveNextPath(fallback);
   redirect(`/login?next=${encodeURIComponent(next)}`);
 }
 

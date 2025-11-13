@@ -2,10 +2,9 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { signIn } from "@/app/(shop)/auth/actions";
-import type {
-  startAuth as StartAuthFn,
-  requestPasswordReset as RequestPasswordResetFn,
-} from "@/app/(shop)/auth/actions";
+
+type StartAuthFn = typeof import("@/app/(shop)/auth/actions").startAuth;
+type RequestPasswordResetFn = typeof import("@/app/(shop)/auth/actions").requestPasswordReset;
 
 type LookupResult = Awaited<ReturnType<StartAuthFn>> | null;
 type ResetResult = Awaited<ReturnType<RequestPasswordResetFn>> | null;
@@ -42,9 +41,9 @@ export default function AuthPanel() {
   const passwordRef = useRef<HTMLInputElement | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [lookupResult, lookupAction, lookupPending] = useActionState<LookupResult>(lookupHandler, null);
-  const [loginResult, loginAction, loginPending] = useActionState<SignInResult>(signIn as any, null);
-  const [resetResult, resetAction, resetPending] = useActionState<ResetResult>(resetHandler, null);
+  const [lookupResult, lookupAction, lookupPending] = useActionState<LookupResult, FormData>(lookupHandler, null);
+  const [loginResult, loginAction, loginPending] = useActionState<SignInResult, FormData>(signIn as any, null);
+  const [resetResult, resetAction, resetPending] = useActionState<ResetResult, FormData>(resetHandler, null);
 
   useEffect(() => {
     if (!lookupResult) return;
@@ -349,4 +348,3 @@ export default function AuthPanel() {
     </>
   );
 }
-

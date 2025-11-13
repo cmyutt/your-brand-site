@@ -1,4 +1,4 @@
-/* eslint-disable @next/next/no-img-element */
+﻿/* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
 
@@ -78,7 +78,6 @@ export default async function Home() {
           <div className="flex flex-wrap items-center justify-between gap-3" id="product-hero">
             <h1 className="text-2xl font-semibold text-gray-900">Products</h1>
             {session ? (
-              // @ts-expect-error client component usage
               <div className="flex items-center gap-2">
                 <a
                   href="/account"

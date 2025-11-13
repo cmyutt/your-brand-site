@@ -42,8 +42,17 @@ export async function topProductsBetween(from?: Date, to?: Date, limit = 5): Pro
     where: { id: { in: sorted.map(([id]) => id) } },
     select: { id: true, name: true },
   });
-  const nameById = new Map(products.map((p: any) => [String(p.id), p.name]));
-  return sorted.map(([id, qty]) => ({ id, name: nameById.get(id) ?? id, qty } satisfies TopProduct));
+  const nameById = new Map<string, string>(
+    products.map((p: any) => [String(p.id), String(p.name ?? "")])
+  );
+  return sorted.map(
+    ([id, qty]) =>
+      ({
+        id,
+        name: nameById.get(id) || id,
+        qty,
+      }) satisfies TopProduct
+  );
 }
 
 export async function leadTimeBetween(from?: Date, to?: Date) {

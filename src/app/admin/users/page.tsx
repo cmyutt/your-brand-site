@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import UsersRow from "./users/UsersRow";
 import LiveRefresher from "@/app/admin/dashboard/LiveRefresher";
@@ -8,24 +8,23 @@ import { buttonPrimaryClass, cardBaseClass } from "@/lib/ui";
 const PAGE_SIZE = 20;
 
 const VERIFICATION_FILTERS = [
-  { value: "all", label: "전체" },
-  { value: "verified", label: "인증됨" },
-  { value: "unverified", label: "미인증" },
+  { value: "all", label: "All statuses" },
+  { value: "verified", label: "Verified" },
+  { value: "unverified", label: "Not verified" },
 ] as const;
 
 const SORT_OPTIONS = [
-  { value: "createdAt:desc", label: "가입 최신순" },
-  { value: "createdAt:asc", label: "가입 오래된순" },
-  { value: "email:asc", label: "이메일 A-Z" },
-  { value: "email:desc", label: "이메일 Z-A" },
-  { value: "lastLoginAt:desc", label: "최근 로그인 최신순" },
-  { value: "lastLoginAt:asc", label: "최근 로그인 오래된순" },
+  { value: "createdAt:desc", label: "Newest signup" },
+  { value: "createdAt:asc", label: "Oldest signup" },
+  { value: "email:asc", label: "Email A-Z" },
+  { value: "email:desc", label: "Email Z-A" },
+  { value: "lastLoginAt:desc", label: "Latest login" },
+  { value: "lastLoginAt:asc", label: "Oldest login" },
 ] as const;
 
 type SearchParams = Promise<Record<string, string>>;
 
 type VerificationFilter = (typeof VERIFICATION_FILTERS)[number]["value"];
-
 type SortValue = (typeof SORT_OPTIONS)[number]["value"];
 
 const formatDateTime = (value?: Date | null) =>
@@ -37,7 +36,7 @@ const formatDateTime = (value?: Date | null) =>
         hour: "2-digit",
         minute: "2-digit",
       }).format(new Date(value))
-    : "—";
+    : "-";
 
 export default async function AdminUsersPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
@@ -83,19 +82,18 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
 
   return (
     <div className="space-y-6 p-6">
-      {/* @ts-expect-error client component in server page */}
       <LiveRefresher topic="admin:users" refreshDebounceMs={500} />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold text-gray-900">계정 관리</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">Account management</h1>
         <p className="text-sm text-gray-500">
-          총 {total.toLocaleString()}건 · {page}/{totalPages}페이지
+          {total.toLocaleString()} result(s) · page {page}/{totalPages}
         </p>
       </div>
 
       <form className="grid gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:grid-cols-[minmax(0,2fr)_repeat(2,minmax(0,1fr))_max-content] md:items-end">
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-500">검색(이메일)</label>
+          <label className="text-xs font-medium text-gray-500">Search email</label>
           <input
             name="q"
             defaultValue={query}
@@ -105,7 +103,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-500">인증 여부</label>
+          <label className="text-xs font-medium text-gray-500">Verification</label>
           <select
             name="v"
             defaultValue={verification}
@@ -120,7 +118,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-500">정렬</label>
+          <label className="text-xs font-medium text-gray-500">Sort by</label>
           <select
             name="sort"
             defaultValue={sortValue}
@@ -138,7 +136,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
           type="submit"
           className={cn(buttonPrimaryClass, "h-10 w-full justify-center px-5 shadow md:w-auto md:self-end")}
         >
-          적용
+          Apply
         </button>
       </form>
 
@@ -147,19 +145,19 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: S
           <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
               <tr>
-                <th className="whitespace-nowrap px-4 py-3 text-left">이메일</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">역할</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">가입일</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">최근 로그인</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">인증</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">조치</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Email</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Role</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Signup date</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Last login</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Verified</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {users.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-5 py-12 text-center text-sm text-gray-500">
-                    조건에 맞는 사용자가 없습니다.
+                    No users match your filters.
                   </td>
                 </tr>
               ) : (

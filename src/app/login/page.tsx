@@ -3,10 +3,9 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "@/app/(shop)/auth/actions";
-import type {
-  startAuth as StartAuthFn,
-  requestPasswordReset as RequestPasswordResetFn,
-} from "@/app/(shop)/auth/actions";
+
+type StartAuthFn = typeof import("@/app/(shop)/auth/actions").startAuth;
+type RequestPasswordResetFn = typeof import("@/app/(shop)/auth/actions").requestPasswordReset;
 
 type LookupResult = Awaited<ReturnType<StartAuthFn>> | null;
 type ResetResult = Awaited<ReturnType<RequestPasswordResetFn>> | null;
@@ -32,7 +31,7 @@ const lookupHandler: LookupHandler = async (_prev, formData) => {
 const resetHandler: ResetHandler = async (_prev, formData) => {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   if (!email) {
-    return { kind: "fail", message: "이메일을 먼저 입력해 주세요." } as Awaited<ReturnType<RequestPasswordResetFn>>;
+    return { kind: "fail", message: "이메일을 입력해 주세요." } as Awaited<ReturnType<RequestPasswordResetFn>>;
   }
   formData.set("email", email);
   const { requestPasswordReset } = await import("@/app/(shop)/auth/actions");
@@ -51,9 +50,9 @@ export default function LoginPage() {
 
   const passwordRef = useRef<HTMLInputElement | null>(null);
 
-  const [lookupResult, lookupAction, lookupPending] = useActionState<LookupResult>(lookupHandler, null);
-  const [loginResult, loginAction, loginPending] = useActionState<SignInResult>(signIn as any, null);
-  const [resetResult, resetAction, resetPending] = useActionState<ResetResult>(resetHandler, null);
+  const [lookupResult, lookupAction, lookupPending] = useActionState<LookupResult, FormData>(lookupHandler, null);
+  const [loginResult, loginAction, loginPending] = useActionState<SignInResult, FormData>(signIn as any, null);
+  const [resetResult, resetAction, resetPending] = useActionState<ResetResult, FormData>(resetHandler, null);
 
   useEffect(() => {
     if (!lookupResult) return;
@@ -122,7 +121,7 @@ export default function LoginPage() {
       <div className="mx-auto w-full max-w-md rounded-none border border-gray-200 bg-white p-10 shadow-sm">
         <h1 className="text-2xl font-semibold text-gray-900">로그인</h1>
         <p className="mt-2 text-sm text-gray-600">
-          이메일을 입력하면 계정을 확인하고, 등록된 계정이라면 비밀번호 입력창이 나타납니다.
+          이메일을 입력하면 계정을 확인하고, 존재하는 계정이라면 비밀번호 입력창이 나타납니다.
         </p>
         {feedback && (
           <div
@@ -222,7 +221,7 @@ export default function LoginPage() {
                 disabled={disabledReset}
                 className="text-sm font-medium text-gray-700 underline underline-offset-4 transition hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                비밀번호를 잊어버리셨나요?
+                비밀번호를 잊으셨나요?
               </button>
             </form>
           </div>
@@ -234,7 +233,7 @@ export default function LoginPage() {
           }`}
         >
           <div className="mt-6 rounded-none border border-gray-200 bg-white p-5 text-sm text-gray-800">
-            <p className="font-medium">등록된 계정을 찾을 수 없습니다.</p>
+            <p className="font-medium">계정을 찾을 수 없습니다.</p>
             <p className="mt-2 text-xs text-gray-600">
               입력한 이메일로 새 계정을 만들려면 아래 버튼을 눌러 회원가입을 진행해 주세요.
             </p>
