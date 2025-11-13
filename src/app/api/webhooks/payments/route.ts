@@ -5,7 +5,6 @@ import { recordPaymentWebhook, recordStatusChange } from "@/lib/orderEvents";
 import { recordAdminAudit } from "@/lib/adminAudit";
 import { verifyHmac } from "@/lib/webhooks/hmac";
 import { claimOnce } from "@/lib/webhooks/idempotency";
-import { ENV } from "@/lib/env";
 
 function verifyMockSignature(headers: Headers) {
   const sig = headers.get("x-mock-signature") || "";
@@ -13,12 +12,12 @@ function verifyMockSignature(headers: Headers) {
 }
 
 export async function POST(req: Request) {
-  // 0) raw body (HMAC/idem 용)
+  // 0) raw body (HMAC/idem Ȯ�ο�)
   const raw = Buffer.from(await req.arrayBuffer());
 
-  // 1) HMAC (옵션) — PAYMENT_WEBHOOK_SECRET 이 설정된 경우만 검증
+  // 1) HMAC ���� (��ũ�� ���� ��) �Ǵ� mock ���� Ȯ��
   try {
-    const secret = (ENV as any).PAYMENT_WEBHOOK_SECRET ?? process.env.PAYMENT_WEBHOOK_SECRET ?? "";
+    const secret = process.env.PAYMENT_WEBHOOK_SECRET ?? "";
     if (secret) {
       const ok = verifyHmac({
         raw,
@@ -33,11 +32,8 @@ export async function POST(req: Request) {
         await recordAdminAudit({ action: "PAYMENT_WEBHOOK_HMAC", ok: false, message: "invalid hmac" });
         return NextResponse.json({ ok: false, error: "invalid_signature" }, { status: 401 });
       }
-    } else {
-      // 기존 mock 시그니처 체크 (환경에 따라 사용)
-      if (!verifyMockSignature(req.headers)) {
-        return NextResponse.json({ ok: false, error: "invalid signature" }, { status: 401 });
-      }
+    } else if (!verifyMockSignature(req.headers)) {
+      return NextResponse.json({ ok: false, error: "invalid signature" }, { status: 401 });
     }
   } catch {}
 
@@ -58,7 +54,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "invalid payload" }, { status: 400 });
   }
 
-  // 2) Idempotency — 이벤트 ID/헤더 기반
+  // 2) Idempotency ? �̺�Ʈ ID/��� ���
   try {
     const eventId = (body as any)?.id ?? req.headers.get("X-Event-Id") ?? `${data.paymentId}:${event}`;
     if (eventId) {
@@ -90,7 +86,6 @@ export async function POST(req: Request) {
       nextOrderStatus = "CANCELED";
       break;
     default:
-      // 알 수 없는 이벤트도 웹훅 이력만 남기고 스킵
       await recordPaymentWebhook({
         orderId: payment.orderId,
         note: `unknown event: ${String(event)}`,
@@ -99,7 +94,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, skipped: true });
   }
 
-  // 결제 이력 기록
   await recordPaymentWebhook({
     orderId: payment.orderId,
     note: `provider=${provider}, providerPaymentId=${data.providerPaymentId ?? ""}`,
@@ -112,7 +106,6 @@ export async function POST(req: Request) {
     },
   });
 
-  // 결제/주문 상태 업데이트
   const updated = await prisma.$transaction(async (db) => {
     const p = await db.payment.update({
       where: { id: payment.id },
@@ -144,7 +137,7 @@ export async function POST(req: Request) {
     return p;
   });
 
-  await recordAdminAudit({ action: "PAYMENT_WEBHOOK", ok: true, target: payment.orderId, message: `${event} → ${nextOrderStatus ?? "PAYMENT_ONLY"}` });
+  await recordAdminAudit({ action: "PAYMENT_WEBHOOK", ok: true, target: payment.orderId, message: `${event} �� ${nextOrderStatus ?? "PAYMENT_ONLY"}` });
 
   return NextResponse.json({ ok: true, payment: updated, orderUpdated: Boolean(nextOrderStatus) });
 }
