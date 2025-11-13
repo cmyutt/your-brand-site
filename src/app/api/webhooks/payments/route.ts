@@ -1,5 +1,4 @@
-// src/app/api/webhooks/payments/route.ts
-import { NextResponse } from "next/server";
+癤퓁mport { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { recordPaymentWebhook, recordStatusChange } from "@/lib/orderEvents";
 import { recordAdminAudit } from "@/lib/adminAudit";
@@ -7,20 +6,21 @@ import { verifyHmac } from "@/lib/webhooks/hmac";
 import { claimOnce } from "@/lib/webhooks/idempotency";
 
 function verifyMockSignature(headers: Headers) {
-  const sig = headers.get("x-mock-signature") || "";
-  return sig.length > 0 && sig === (process.env.MOCK_WEBHOOK_SECRET || "");
+  const signature = headers.get("x-mock-signature") || "";
+  const mockSecret = process.env.MOCK_WEBHOOK_SECRET || "";
+  return signature.length > 0 && signature === mockSecret;
 }
 
 export async function POST(req: Request) {
-  // 0) raw body (HMAC/idem 확인용)
-  const raw = Buffer.from(await req.arrayBuffer());
+  // 0) Keep the raw body for HMAC and idempotency checks
+  const rawBody = Buffer.from(await req.arrayBuffer());
 
-  // 1) HMAC 검증 (시크릿 존재 시) 또는 mock 서명 확인
+  // 1) HMAC validation (only when PAYMENT_WEBHOOK_SECRET exists)
   try {
     const secret = process.env.PAYMENT_WEBHOOK_SECRET ?? "";
     if (secret) {
       const ok = verifyHmac({
-        raw,
+        raw: rawBody,
         secret,
         headers: {
           signature: req.headers.get("X-Signature"),
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     }
   } catch {}
 
-  const text = raw.toString("utf8");
+  const text = rawBody.toString("utf8");
   const body = (text ? JSON.parse(text) : ({} as unknown));
   const { event, provider, data } = body as {
     event?: "payment.paid" | "payment.failed" | "payment.canceled";
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "invalid payload" }, { status: 400 });
   }
 
-  // 2) Idempotency ? 이벤트 ID/헤더 기반
+  // 2) Idempotency guard
   try {
     const eventId = (body as any)?.id ?? req.headers.get("X-Event-Id") ?? `${data.paymentId}:${event}`;
     if (eventId) {
@@ -67,7 +67,9 @@ export async function POST(req: Request) {
   } catch {}
 
   const payment = await prisma.payment.findUnique({ where: { id: data.paymentId } });
-  if (!payment) return NextResponse.json({ ok: false, error: "payment not found" }, { status: 404 });
+  if (!payment) {
+    return NextResponse.json({ ok: false, error: "payment not found" }, { status: 404 });
+  }
 
   let nextPaymentStatus = payment.status;
   let nextOrderStatus: "PAID" | "CANCELED" | undefined;
@@ -107,7 +109,7 @@ export async function POST(req: Request) {
   });
 
   const updated = await prisma.$transaction(async (db) => {
-    const p = await db.payment.update({
+    const updatedPayment = await db.payment.update({
       where: { id: payment.id },
       data: {
         status: nextPaymentStatus,
@@ -134,10 +136,15 @@ export async function POST(req: Request) {
       }
     }
 
-    return p;
+    return updatedPayment;
   });
 
-  await recordAdminAudit({ action: "PAYMENT_WEBHOOK", ok: true, target: payment.orderId, message: `${event} → ${nextOrderStatus ?? "PAYMENT_ONLY"}` });
+  await recordAdminAudit({
+    action: "PAYMENT_WEBHOOK",
+    ok: true,
+    target: payment.orderId,
+    message: `${event} -> ${nextOrderStatus ?? "PAYMENT_ONLY"}`,
+  });
 
   return NextResponse.json({ ok: true, payment: updated, orderUpdated: Boolean(nextOrderStatus) });
 }
