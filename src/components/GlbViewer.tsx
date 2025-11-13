@@ -3,8 +3,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, useGLTF, Environment } from "@react-three/drei";
-import type { OrbitControls as OrbitControlsImpl } from "three/examples/jsm/controls/OrbitControls.js";
-import { Vector3 } from "three";
+import { Camera, Vector3 } from "three";
 
 export type GlbVector = {
   x: number;
@@ -54,8 +53,16 @@ function clampValue(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+type OrbitControlsLike = {
+  object: Camera;
+  target: Vector3;
+  minDistance: number;
+  maxDistance: number;
+  update(): void;
+};
+
 function applyDistanceLimits(
-  controls: OrbitControlsImpl,
+  controls: OrbitControlsLike,
   base: number,
   safeMaxZoom: number,
 ) {
@@ -75,7 +82,7 @@ function ZoomController({
   safeMaxZoom,
   setZoomFactor,
 }: {
-  controlsRef: React.MutableRefObject<OrbitControlsImpl | null>;
+  controlsRef: React.MutableRefObject<OrbitControlsLike | null>;
   baseDistanceRef: React.MutableRefObject<number | null>;
   tempVectorRef: React.MutableRefObject<Vector3>;
   safeMaxZoom: number;
@@ -140,7 +147,7 @@ export default function GlbViewer({
   showZoomIndicator = true,
   maxZoom = 3,
 }: GlbViewerProps) {
-  const controlsRef = useRef<OrbitControlsImpl | null>(null);
+  const controlsRef = useRef<OrbitControlsLike | null>(null);
   const baseDistanceRef = useRef<number | null>(null);
   const tempVectorRef = useRef(new Vector3());
   const [zoomFactor, setZoomFactor] = useState(1);
