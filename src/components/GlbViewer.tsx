@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, useGLTF, Environment } from "@react-three/drei";
-import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import type { OrbitControls as OrbitControlsImpl } from "three/examples/jsm/controls/OrbitControls.js";
 import { Vector3 } from "three";
 
 export type GlbVector = {
@@ -94,8 +94,9 @@ function ZoomController({
     }
 
     if (!baseDistanceRef.current || baseDistanceRef.current <= 0) {
-      baseDistanceRef.current = currentDistance;
-      applyDistanceLimits(controls, baseDistanceRef.current, safeMaxZoom);
+      const baseDistance = currentDistance;
+      baseDistanceRef.current = baseDistance;
+      applyDistanceLimits(controls, baseDistance, safeMaxZoom);
       setZoomFactor(1);
       return;
     }
